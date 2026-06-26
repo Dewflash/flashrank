@@ -15,9 +15,11 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import TagManagerModal from '@/components/TagManagerModal';
+import SettingsModal from '@/components/SettingsModal';
 
 export default function Sidebar() {
   const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const {
     apps,
     selectedAppId,
@@ -182,6 +184,17 @@ export default function Sidebar() {
             ))}
           </div>
         </div>
+
+        <div className="nav-section">
+          <button
+            className="nav-item"
+            style={{ marginTop: 'auto' }}
+            onClick={() => setIsSettingsOpen(true)}
+          >
+            <Settings size={18} className="nav-item-icon" />
+            <span className="nav-label">Settings & APIs</span>
+          </button>
+        </div>
       </nav>
 
       {/* Footer */}
@@ -194,6 +207,7 @@ export default function Sidebar() {
         </div>
       </div>
       <TagManagerModal isOpen={isTagManagerOpen} onClose={() => setIsTagManagerOpen(false)} />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </aside>
   );
 }

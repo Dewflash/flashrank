@@ -124,4 +124,15 @@ export interface AppState {
   
   // Tags
   tags: KeywordTag[];
+
+  // Settings
+  apiKeys: {
+    ascIssuerId: string;
+    ascKeyId: string;
+    ascPrivateKey: string;
+    asaClientId: string;
+    asaTeamId: string;
+    asaKeyId: string;
+    asaPrivateKey: string;
+  };
 }

@@ -24,8 +24,35 @@ import {
 import { useAppStore } from '@/store/useAppStore';
 
 export default function OverviewView() {
-  const { keywords, selectedAppId, apps } = useAppStore();
+  const { keywords, selectedAppId, apps, apiKeys } = useAppStore();
   const appKeywords = keywords.filter((k) => k.appId === selectedAppId);
+
+  const [metrics, setMetrics] = React.useState({ impressions: 0, productPageViews: 0, downloads: 0 });
+  const [isLoadingMetrics, setIsLoadingMetrics] = React.useState(false);
+
+  React.useEffect(() => {
+    if (selectedAppId && apiKeys.ascIssuerId && apiKeys.ascKeyId && apiKeys.ascPrivateKey) {
+      setIsLoadingMetrics(true);
+      fetch('/api/appStoreConnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issuerId: apiKeys.ascIssuerId,
+          keyId: apiKeys.ascKeyId,
+          privateKey: apiKeys.ascPrivateKey,
+          appId: selectedAppId
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.data?.metrics) {
+          setMetrics(data.data.metrics);
+        }
+      })
+      .catch(err => console.error("Failed to load ASC metrics", err))
+      .finally(() => setIsLoadingMetrics(false));
+    }
+  }, [selectedAppId, apiKeys]);
 
   // Overview stats
   const totalKeywords = appKeywords.length;
@@ -148,26 +175,26 @@ export default function OverviewView() {
 
       {/* Stats Grid */}
       <div className="overview-grid">
-        <div className="overview-card">
-          <div className="overview-card-title">
-            <Search size={14} style={{ marginRight: '6px', opacity: 0.5 }} />
-            Total Keywords
+        <div className="stat-card">
+          <div className="stat-card-header">
+            <span className="stat-card-title">Impressions (30d)</span>
+            <Zap size={16} className="stat-card-icon" style={{ color: 'var(--tag-purple)' }} />
           </div>
-          <div className="overview-card-value">{totalKeywords}</div>
-          <div className="overview-card-subtitle">
-            {rankedKeywords} currently ranked
+          <div className="stat-card-value">
+            {isLoadingMetrics ? '...' : (metrics.impressions > 0 ? metrics.impressions.toLocaleString() : 'N/A')}
           </div>
+          <div className="stat-card-trend neutral">App Store Connect</div>
         </div>
 
-        <div className="overview-card">
-          <div className="overview-card-title">
-            <BarChart3 size={14} style={{ marginRight: '6px', opacity: 0.5 }} />
-            Avg. Popularity
+        <div className="stat-card">
+          <div className="stat-card-header">
+            <span className="stat-card-title">Downloads (30d)</span>
+            <Target size={16} className="stat-card-icon" style={{ color: 'var(--color-success)' }} />
           </div>
-          <div className="overview-card-value">{avgPopularity}</div>
-          <div className="overview-card-subtitle">
-            Across all tracked keywords
+          <div className="stat-card-value">
+            {isLoadingMetrics ? '...' : (metrics.downloads > 0 ? metrics.downloads.toLocaleString() : 'N/A')}
           </div>
+          <div className="stat-card-trend neutral">App Store Connect</div>
         </div>
 
         <div className="overview-card">

@@ -1,5 +1,6 @@
 // Zustand store — single source of truth for the Astro ASO Clone
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import {
   AppState,
   TrackedApp,
@@ -9,7 +10,6 @@ import {
   SortDirection,
   ViewMode,
 } from '@/types';
-import { mockApps, mockKeywords, mockTags } from '@/data/mockData';
 
 // ─── Action types ───────────────────────────────────────────────────────────
 
@@ -43,6 +43,7 @@ interface AppActions {
   setAddAppModalOpen: (open: boolean) => void;
   setDetailPanelOpen: (open: boolean) => void;
   setRefreshing: (refreshing: boolean) => void;
+  setApiKeys: (keys: Partial<AppState['apiKeys']>) => void;
 
   // Derived data
   getFilteredKeywords: () => TrackedKeyword[];
@@ -51,23 +52,39 @@ interface AppActions {
 
 // ─── Store ──────────────────────────────────────────────────────────────────
 
-export const useAppStore = create<AppState & AppActions>((set, get) => ({
-  // ── Initial state ──────────────────────────────────────────
+export const useAppStore = create<AppState & AppActions>()(
+  persist(
+    (set, get) => ({
+      // ── Initial state ──────────────────────────────────────────
 
-  apps: mockApps,
-  selectedAppId: mockApps[0]?.id ?? null,
-  keywords: mockKeywords,
-  selectedKeywordId: null,
-  viewMode: 'keywords',
-  sort: { field: 'popularity', direction: 'desc' },
-  filter: { search: '', tags: [], difficulty: [], rankRange: [null, null] },
-  isSidebarCollapsed: false,
-  isAddKeywordModalOpen: false,
-  isAddAppModalOpen: false,
-  isDetailPanelOpen: false,
-  isRefreshing: false,
-  lastSyncTime: new Date().toISOString(),
-  tags: mockTags,
+      apps: [],
+      selectedAppId: null,
+      keywords: [],
+      selectedKeywordId: null,
+      viewMode: 'keywords',
+      sort: { field: 'popularity', direction: 'desc' },
+      filter: { search: '', tags: [], difficulty: [], rankRange: [null, null] },
+      isSidebarCollapsed: false,
+      isAddKeywordModalOpen: false,
+      isAddAppModalOpen: false,
+      isDetailPanelOpen: false,
+      isRefreshing: false,
+      lastSyncTime: new Date().toISOString(),
+      apiKeys: {
+        ascIssuerId: '',
+        ascKeyId: '',
+        ascPrivateKey: '',
+        asaClientId: '',
+        asaTeamId: '',
+        asaKeyId: '',
+        asaPrivateKey: '',
+      },
+      tags: [
+        { id: 'tag-1', name: 'Brand', color: 'var(--tag-blue)' },
+        { id: 'tag-2', name: 'Generic', color: 'var(--tag-purple)' },
+        { id: 'tag-3', name: 'Competitor', color: 'var(--tag-red)' },
+        { id: 'tag-4', name: 'High Priority', color: 'var(--tag-yellow)' },
+      ],
 
   // ── App management ─────────────────────────────────────────
 
@@ -197,6 +214,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       ...(refreshing ? {} : { lastSyncTime: new Date().toISOString() }),
     }),
 
+  setApiKeys: (keys) =>
+    set((state) => ({
+      apiKeys: { ...state.apiKeys, ...keys },
+    })),
+
   // ── Derived data ───────────────────────────────────────────
 
   getFilteredKeywords: () => {
@@ -275,4 +297,22 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       }
     });
   },
-}));
+}),
+{
+  name: 'astro-aso-storage', // key in localStorage
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        // What fields to persist
+        apps: state.apps,
+        keywords: state.keywords,
+        tags: state.tags,
+        selectedAppId: state.selectedAppId,
+        viewMode: state.viewMode,
+        sort: state.sort,
+        isSidebarCollapsed: state.isSidebarCollapsed,
+        lastSyncTime: state.lastSyncTime,
+        apiKeys: state.apiKeys,
+      }),
+    }
+  )
+);
