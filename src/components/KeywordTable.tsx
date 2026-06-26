@@ -241,7 +241,9 @@ export default function KeywordTable() {
               <td>
                 <div className="rank-cell">
                   {kw.currentRank ? (
-                    <span className="rank-value">#{kw.currentRank}</span>
+                    <span className={`rank-value ${kw.currentRank <= 3 ? `rank-${kw.currentRank}` : ''}`}>
+                      #{kw.currentRank}
+                    </span>
                   ) : (
                     <span className="rank-value unranked">—</span>
                   )}

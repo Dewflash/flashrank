@@ -743,6 +743,28 @@ body {
   font-size: 12px;
 }
 
+.rank-value.rank-1 {
+  background: linear-gradient(135deg, #ffd700, #ffb300);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+  font-weight: 700;
+}
+
+.rank-value.rank-2 {
+  background: linear-gradient(135deg, #e0e0e0, #9e9e9e);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 700;
+}
+
+.rank-value.rank-3 {
+  background: linear-gradient(135deg, #cd7f32, #a0522d);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 700;
+}
+
 .rank-change {
   display: inline-flex;
   align-items: center;

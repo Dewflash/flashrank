@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   BarChart3,
   Search,
@@ -14,8 +14,10 @@ import {
   LayoutDashboard,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import TagManagerModal from '@/components/TagManagerModal';
 
 export default function Sidebar() {
+  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
   const {
     apps,
     selectedAppId,
@@ -144,7 +146,17 @@ export default function Sidebar() {
         </div>
 
         <div className="nav-section">
-          <div className="nav-section-title">Tags</div>
+          <div className="nav-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            Tags
+            <button 
+              className="btn-icon" 
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-tertiary)' }}
+              onClick={() => setIsTagManagerOpen(true)}
+              title="Manage Tags"
+            >
+              <Settings size={12} />
+            </button>
+          </div>
           <div className="tag-list">
             {tags.map((tag) => (
               <div
@@ -181,6 +193,7 @@ export default function Sidebar() {
           </span>
         </div>
       </div>
+      <TagManagerModal isOpen={isTagManagerOpen} onClose={() => setIsTagManagerOpen(false)} />
     </aside>
   );
 }

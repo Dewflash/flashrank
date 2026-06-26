@@ -190,7 +190,9 @@ export default function CompetitorsView() {
                       <td>
                         <div className="rank-cell">
                           {kw.currentRank ? (
-                            <span className="rank-value">#{kw.currentRank}</span>
+                            <span className={`rank-value ${kw.currentRank <= 3 ? `rank-${kw.currentRank}` : ''}`}>
+                              #{kw.currentRank}
+                            </span>
                           ) : (
                             <span className="rank-value unranked">—</span>
                           )}
@@ -221,7 +223,9 @@ export default function CompetitorsView() {
                         return (
                           <td key={comp.id}>
                             {simRank ? (
-                              <span className="rank-value">#{simRank}</span>
+                              <span className={`rank-value ${simRank <= 3 ? `rank-${simRank}` : ''}`}>
+                                #{simRank}
+                              </span>
                             ) : (
                               <span className="rank-value unranked">—</span>
                             )}

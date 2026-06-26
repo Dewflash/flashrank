@@ -12,79 +12,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useAppStore } from '@/store/useAppStore';
-
-const mockTopApps = [
-  {
-    rank: 1,
-    name: 'Focus Timer - Pomodoro',
-    developer: 'AppCo',
-    rating: 4.8,
-    ratingCount: 52000,
-  },
-  {
-    rank: 2,
-    name: 'Forest: Focus for Productivity',
-    developer: 'Seekrtech',
-    rating: 4.7,
-    ratingCount: 89000,
-  },
-  {
-    rank: 3,
-    name: 'Be Focused - Focus Timer',
-    developer: 'Denys Yevenko',
-    rating: 4.6,
-    ratingCount: 12000,
-  },
-  {
-    rank: 4,
-    name: 'Flow - Focus & Pomodoro Timer',
-    developer: 'Yugen Apps',
-    rating: 4.5,
-    ratingCount: 8000,
-  },
-  {
-    rank: 5,
-    name: 'Tide: Focus Timer & Sleep',
-    developer: 'Moreless, Inc',
-    rating: 4.5,
-    ratingCount: 15000,
-  },
-  {
-    rank: 6,
-    name: 'Plantie - Focus & Study Timer',
-    developer: 'Plantie Inc',
-    rating: 4.4,
-    ratingCount: 6500,
-  },
-  {
-    rank: 7,
-    name: 'Session - Pomodoro Timer',
-    developer: 'Session Co',
-    rating: 4.3,
-    ratingCount: 3200,
-  },
-  {
-    rank: 8,
-    name: 'Focus Keeper - Time Management',
-    developer: 'Limepresso',
-    rating: 4.3,
-    ratingCount: 9800,
-  },
-  {
-    rank: 9,
-    name: 'Centered - Flow & Focus',
-    developer: 'Centered Inc',
-    rating: 4.2,
-    ratingCount: 2100,
-  },
-  {
-    rank: 10,
-    name: 'Focus To-Do: Pomodoro & Tasks',
-    developer: 'Shenzhen Tomato',
-    rating: 4.1,
-    ratingCount: 7400,
-  },
-];
+import { searchApps } from '@/lib/api';
 
 export default function DetailPanel() {
   const {
@@ -98,6 +26,27 @@ export default function DetailPanel() {
 
   const keyword = keywords.find((k) => k.id === selectedKeywordId);
   const [noteText, setNoteText] = useState('');
+  const [topApps, setTopApps] = useState<any[]>([]);
+  const [isLoadingApps, setIsLoadingApps] = useState(false);
+
+  useEffect(() => {
+    if (keyword) {
+      setNoteText(keyword.note?.text || '');
+      
+      const fetchApps = async () => {
+        setIsLoadingApps(true);
+        try {
+          const results = await searchApps(keyword.keyword, keyword.region || 'us');
+          setTopApps(results.slice(0, 10));
+        } catch (e) {
+          console.error("Failed to fetch top apps", e);
+        } finally {
+          setIsLoadingApps(false);
+        }
+      };
+      fetchApps();
+    }
+  }, [keyword?.id]);
 
   useEffect(() => {
     if (keyword?.note) {
@@ -286,33 +235,47 @@ export default function DetailPanel() {
         {/* Top 10 Apps */}
         <div className="top-apps-section">
           <div className="chart-section-title">Top 10 Apps</div>
-          {mockTopApps.map((app) => (
-            <div key={app.rank} className="top-app-item">
-              <span className="top-app-rank">{app.rank}</span>
-              <div
-                className="top-app-icon"
-                style={{
-                  background: `hsl(${app.rank * 36}, 60%, 50%)`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                }}
-              >
-                {app.name.charAt(0)}
-              </div>
-              <div className="top-app-info">
-                <div className="top-app-name">{app.name}</div>
-                <div className="top-app-developer">{app.developer}</div>
-              </div>
-              <div className="top-app-rating">
-                <Star size={10} fill="var(--color-warning)" stroke="none" />
-                {app.rating}
-              </div>
+          {isLoadingApps ? (
+            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+              Loading top apps...
             </div>
-          ))}
+          ) : (
+            topApps.map((app, idx) => (
+              <div key={app.id} className="top-app-item">
+                <span className="top-app-rank">{idx + 1}</span>
+                {app.icon ? (
+                  <img
+                    src={app.icon}
+                    alt={app.name}
+                    className="top-app-icon"
+                  />
+                ) : (
+                  <div
+                    className="top-app-icon"
+                    style={{
+                      background: `hsl(${(idx + 1) * 36}, 60%, 50%)`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {app.name.charAt(0)}
+                  </div>
+                )}
+                <div className="top-app-info">
+                  <div className="top-app-name">{app.name}</div>
+                  <div className="top-app-developer">{app.developer}</div>
+                </div>
+                <div className="top-app-rating">
+                  <Star size={10} fill="var(--color-warning)" stroke="none" />
+                  {app.rating ? app.rating.toFixed(1) : 'N/A'}
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Notes */}

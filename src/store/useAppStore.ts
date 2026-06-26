@@ -26,6 +26,11 @@ interface AppActions {
   updateKeywordTags: (keywordId: string, tags: KeywordTag[]) => void;
   updateKeywordNote: (keywordId: string, note: string) => void;
 
+  // Tag management
+  addTag: (tag: KeywordTag) => void;
+  removeTag: (tagId: string) => void;
+  updateTag: (tagId: string, tag: Partial<KeywordTag>) => void;
+
   // View state
   setViewMode: (mode: ViewMode) => void;
   setSort: (field: SortField, direction: SortDirection) => void;
@@ -127,6 +132,39 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
             }
           : k,
       ),
+    })),
+
+  // ── Tag management ─────────────────────────────────────────
+
+  addTag: (tag) => set((state) => ({ tags: [...state.tags, tag] })),
+
+  removeTag: (tagId) =>
+    set((state) => ({
+      tags: state.tags.filter((t) => t.id !== tagId),
+      // Also remove this tag from all keywords
+      keywords: state.keywords.map((k) => ({
+        ...k,
+        tags: k.tags.filter((t) => t.id !== tagId),
+      })),
+      // Also remove from active filters
+      filter: {
+        ...state.filter,
+        tags: state.filter.tags.filter((id) => id !== tagId),
+      },
+    })),
+
+  updateTag: (tagId, updatedTag) =>
+    set((state) => ({
+      tags: state.tags.map((t) =>
+        t.id === tagId ? { ...t, ...updatedTag } : t,
+      ),
+      // Also update instances of this tag in keywords
+      keywords: state.keywords.map((k) => ({
+        ...k,
+        tags: k.tags.map((t) =>
+          t.id === tagId ? { ...t, ...updatedTag } : t,
+        ),
+      })),
     })),
 
   // ── View state ─────────────────────────────────────────────
