@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Search, Plus, Download, RefreshCw } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import RegionSelector from '@/components/RegionSelector';
 
 export default function HeaderBar() {
   const {
@@ -16,6 +17,7 @@ export default function HeaderBar() {
     setRefreshing,
   } = useAppStore();
 
+  const [region, setRegion] = useState('us');
   const keywordCount = keywords.filter((k) => k.appId === selectedAppId).length;
 
   const handleExport = () => {
@@ -72,6 +74,7 @@ export default function HeaderBar() {
                 onChange={(e) => setSearchFilter(e.target.value)}
               />
             </div>
+            <RegionSelector value={region} onChange={setRegion} />
             <button
               className="btn btn-secondary btn-icon tooltip"
               onClick={handleRefresh}
@@ -106,3 +109,4 @@ export default function HeaderBar() {
     </div>
   );
 }
+

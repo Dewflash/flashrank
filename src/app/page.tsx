@@ -9,6 +9,8 @@ import AddKeywordModal from '@/components/AddKeywordModal';
 import AddAppModal from '@/components/AddAppModal';
 import OverviewView from '@/components/OverviewView';
 import CompetitorsView from '@/components/CompetitorsView';
+import StatusBar from '@/components/StatusBar';
+import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import { useAppStore } from '@/store/useAppStore';
 
 export default function Home() {
@@ -33,12 +35,14 @@ export default function Home() {
 
   return (
     <div className="app-shell">
+      <KeyboardShortcuts />
       <Sidebar />
       <div className="main-content">
         <HeaderBar />
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {renderMainContent()}
         </div>
+        <StatusBar />
       </div>
 
       {/* Modals */}

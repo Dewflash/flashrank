@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ArrowUp,
   ArrowDown,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { TrackedKeyword, SortField } from '@/types';
+import ContextMenu from '@/components/ContextMenu';
 
 export default function KeywordTable() {
   const {
@@ -23,6 +24,17 @@ export default function KeywordTable() {
     setSort,
     filter,
   } = useAppStore();
+
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    keywordId: string;
+  } | null>(null);
+
+  const handleContextMenu = (e: React.MouseEvent, keywordId: string) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, keywordId });
+  };
 
   // Filter keywords
   const filtered = keywords.filter((k) => {
@@ -184,6 +196,7 @@ export default function KeywordTable() {
               key={kw.id}
               className={selectedKeywordId === kw.id ? 'selected' : ''}
               onClick={() => handleRowClick(kw)}
+              onContextMenu={(e) => handleContextMenu(e, kw.id)}
             >
               <td>
                 <div className="keyword-cell">
@@ -262,6 +275,14 @@ export default function KeywordTable() {
           ))}
         </tbody>
       </table>
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          keywordId={contextMenu.keywordId}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }
