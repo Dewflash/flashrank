@@ -293,14 +293,21 @@ export const useAppStore = create<AppState & AppActions>()(
     }),
 
   removeApp: (appId) =>
-    set((state) => ({
-      apps: state.apps.filter((a) => a.id !== appId),
-      keywords: state.keywords.filter((k) => k.appId !== appId),
-      selectedAppId:
-        state.selectedAppId === appId
-          ? state.apps.find((a) => a.id !== appId)?.id ?? null
-          : state.selectedAppId,
-    })),
+    set((state) => {
+      const selectedKeywordWillBeRemoved =
+        state.selectedKeywordId !== null &&
+        state.keywords.some(
+          (keyword) => keyword.id === state.selectedKeywordId && keyword.appId === appId
+        );
+
+      return {
+        apps: state.apps.filter((a) => a.id !== appId),
+        keywords: state.keywords.filter((k) => k.appId !== appId),
+        selectedAppId: state.selectedAppId === appId ? null : state.selectedAppId,
+        selectedKeywordId: selectedKeywordWillBeRemoved ? null : state.selectedKeywordId,
+        isDetailPanelOpen: selectedKeywordWillBeRemoved ? false : state.isDetailPanelOpen,
+      };
+    }),
 
   // ── Keyword management ─────────────────────────────────────
 
