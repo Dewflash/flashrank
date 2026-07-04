@@ -5,9 +5,6 @@
 import React from 'react';
 import {
   TrendingUp,
-  TrendingDown,
-  Search,
-  BarChart3,
   Target,
   Zap,
 } from 'lucide-react';
@@ -33,7 +30,8 @@ export default function OverviewView() {
   );
 
   const [metrics, setMetrics] = React.useState({ impressions: 0, productPageViews: 0, downloads: 0 });
-  const [metricsSource, setMetricsSource] = React.useState<'missing' | 'estimated' | 'app-store-connect'>('missing');
+  const [metricsSource, setMetricsSource] = React.useState<'missing' | 'app-store-connect' | 'connector-unavailable'>('missing');
+  const [metricsMessage, setMetricsMessage] = React.useState<string | null>(null);
   const [isLoadingMetrics, setIsLoadingMetrics] = React.useState(false);
 
   React.useEffect(() => {
@@ -49,30 +47,34 @@ export default function OverviewView() {
           appId: selectedAppId
         })
       })
-      .then(res => res.json())
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error ?? `App Store Connect request failed with ${res.status}`);
+        }
+        return data;
+      })
       .then(data => {
         if (data.data?.metrics) {
           setMetrics(data.data.metrics);
-          setMetricsSource(data.data.source ?? 'estimated');
+          setMetricsSource('app-store-connect');
+          setMetricsMessage(null);
         }
       })
-      .catch(err => console.error("Failed to load ASC metrics", err))
+      .catch((err) => {
+        console.error("Failed to load ASC metrics", err);
+        setMetrics({ impressions: 0, productPageViews: 0, downloads: 0 });
+        setMetricsSource('connector-unavailable');
+        setMetricsMessage(err instanceof Error ? err.message : 'App Store Connect metrics unavailable.');
+      })
       .finally(() => setIsLoadingMetrics(false));
     } else {
       setMetrics({ impressions: 0, productPageViews: 0, downloads: 0 });
       setMetricsSource('missing');
+      setMetricsMessage(null);
     }
   }, [selectedAppId, apiKeys]);
 
-  // Overview stats
-  const totalKeywords = appKeywords.length;
-  const rankedKeywords = appKeywords.filter((k) => k.currentRank !== null).length;
-  const avgPopularity =
-    totalKeywords > 0
-      ? Math.round(
-          appKeywords.reduce((sum, k) => sum + k.popularity, 0) / totalKeywords
-        )
-      : 0;
   const improvingKeywords = appKeywords.filter(
     (k) => k.rankChange !== null && k.rankChange > 0
   ).length;
@@ -104,8 +106,8 @@ export default function OverviewView() {
   const privateMetricLabel =
     metricsSource === 'missing'
       ? 'Owner-only: App Store Connect required'
-      : metricsSource === 'estimated'
-        ? 'Estimated placeholder'
+      : metricsSource === 'connector-unavailable'
+        ? 'Connector not wired yet'
         : 'App Store Connect';
 
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -251,6 +253,12 @@ export default function OverviewView() {
           </div>
         </div>
       </div>
+
+      {metricsMessage && (
+        <div className="credential-note" style={{ margin: '0 var(--space-lg) var(--space-md)' }}>
+          {metricsMessage}
+        </div>
+      )}
 
       {/* Charts */}
       <div

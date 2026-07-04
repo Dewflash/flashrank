@@ -1,12 +1,12 @@
 # FlashRank UAT Status
 
-This app uses public Apple App Store/iTunes endpoints where possible. It does not fake private Apple metrics. Features that require Apple Search Ads, App Store Connect, DeepL, or Lemon Squeezy are wired as key-required/blocked states until credentials are supplied.
+This app uses public Apple App Store/iTunes endpoints where possible. It does not fake private Apple metrics. Features that require Apple Search Ads, App Store Connect, DeepL, or Lemon Squeezy are wired as key-required/blocked states until credentials and the signed connector implementation exist.
 
 ## Section C: Keyword Intelligence & ASO Data
 
 | Test ID | Status | Notes |
 | --- | --- | --- |
-| C1 Popularity & Difficulty | Partial | Difficulty is calculated from public top-result competition. Popularity is deterministic estimated data unless Apple Search Ads credentials/API integration are supplied. Exact Apple Search Ads popularity is not public/free. |
+| C1 Popularity & Difficulty | Partial | Difficulty is calculated from public top-result competition. Popularity is deterministic estimated data. Exact Apple Search Ads popularity is not public/free, and the signed Apple Ads connector is intentionally blocked instead of returning fake data. |
 | C2 Historical Graphs | Pass | Click a tracked keyword to open the detail panel with 30-day rank history. Newly added keywords start with a first snapshot, then history grows through refresh/sync. |
 | C3 Keyword Suggestions | Pass | Find Suggestions uses public Apple hints/search plus metadata-derived seed terms. |
 | C4 Keyword Translation | Key required | Hovering non-English keywords calls the server-side DeepL route. Without `DEEPL_AUTH_KEY`, the tooltip reports that a DeepL key is required. |

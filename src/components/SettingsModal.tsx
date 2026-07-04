@@ -165,7 +165,7 @@ export default function SettingsModal({
               </div>
               {serverStatus?.appStoreConnect.state === 'ready' && (
                 <div className="credential-note">
-                  Detected complete App Store Connect credentials in <code>.env.local</code>.
+                  Detected complete App Store Connect credentials in <code>.env.local</code>. JWT signing/report fetching is still not wired, so private metrics stay N/A.
                 </div>
               )}
               {ascStatus.missingFields.length > 0 && (
@@ -218,7 +218,7 @@ export default function SettingsModal({
               </div>
               {serverStatus?.appleSearchAds.state === 'ready' && (
                 <div className="credential-note">
-                  Detected complete Apple Search Ads credentials in <code>.env.local</code>.
+                  Detected complete Apple Search Ads credentials in <code>.env.local</code>. Request signing is still not wired, so keyword popularity remains estimated.
                 </div>
               )}
               {asaStatus.missingFields.length > 0 && (
