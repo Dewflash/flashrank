@@ -20,6 +20,7 @@ export default function AddKeywordModal() {
     selectedAppId,
     selectedRegion,
     apps,
+    keywords,
     tags,
   } = useAppStore();
 
@@ -27,11 +28,21 @@ export default function AddKeywordModal() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [progressText, setProgressText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const keywordTerms = React.useMemo(
+    () =>
+      keywordInput
+        .split(/[,\n]/g)
+        .map((value) => value.trim().toLowerCase())
+        .filter((value, index, arr) => value.length > 0 && arr.indexOf(value) === index),
+    [keywordInput]
+  );
 
   const fetchSuggestions = useCallback(
     async (term: string) => {
-      if (term.length < 2) {
+      if (term.length < 2 || /[,\n]/.test(term)) {
         setSuggestions([]);
         return;
       }
@@ -60,12 +71,21 @@ export default function AddKeywordModal() {
     return () => window.clearTimeout(timer);
   }, [fetchSuggestions, keywordInput]);
 
-  const handleAddKeyword = async (keyword: string) => {
-    if (!selectedAppId || !keyword.trim()) return;
+  const handleAddKeyword = async (keyword: string): Promise<boolean> => {
+    if (!selectedAppId || !keyword.trim()) return false;
 
     const normalizedKeyword = keyword.trim().toLowerCase();
-    setIsLoading(true);
-    setError(null);
+    const alreadyTracked = keywords.some(
+      (trackedKeyword) =>
+        trackedKeyword.appId === selectedAppId &&
+        trackedKeyword.region === selectedRegion &&
+        trackedKeyword.keyword.toLowerCase() === normalizedKeyword
+    );
+
+    if (alreadyTracked) {
+      setError(`"${normalizedKeyword}" is already tracked for this app and region.`);
+      return false;
+    }
 
     try {
       const competitors = apps.filter(
@@ -81,7 +101,7 @@ export default function AddKeywordModal() {
 
       if (rankingSignals.sourceStatus === 'error') {
         setError('No Internet Connection. Keyword was not added because ranking data could not be checked.');
-        return;
+        return false;
       }
 
       const popularity = calculatePopularity(normalizedKeyword);
@@ -117,8 +137,33 @@ export default function AddKeywordModal() {
       };
 
       addKeyword(newKeyword);
-      setKeywordInput('');
-      setSuggestions([]);
+      return true;
+    } catch {
+      setError(`Could not check rankings for "${normalizedKeyword}".`);
+      return false;
+    }
+  };
+
+  const handleAddKeywords = async (terms: string[]) => {
+    if (!selectedAppId || terms.length === 0 || isLoading) return;
+
+    setIsLoading(true);
+    setError(null);
+    setProgressText(null);
+
+    try {
+      let addedCount = 0;
+      for (const [index, term] of terms.entries()) {
+        setProgressText(`Checking ${index + 1} of ${terms.length}: ${term}`);
+        const added = await handleAddKeyword(term);
+        if (added) addedCount += 1;
+      }
+
+      if (addedCount > 0) {
+        setKeywordInput('');
+        setSuggestions([]);
+        setProgressText(`Added ${addedCount} keyword${addedCount === 1 ? '' : 's'}.`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -126,7 +171,7 @@ export default function AddKeywordModal() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    void handleAddKeyword(keywordInput);
+    void handleAddKeywords(keywordTerms);
   };
 
   const handleClose = () => {
@@ -134,6 +179,7 @@ export default function AddKeywordModal() {
     setKeywordInput('');
     setSuggestions([]);
     setSelectedTags([]);
+    setProgressText(null);
     setError(null);
   };
 
@@ -156,7 +202,7 @@ export default function AddKeywordModal() {
               <input
                 type="text"
                 className="form-input"
-                placeholder="Enter a keyword to track..."
+                placeholder="Enter one or more keywords, separated by commas..."
                 value={keywordInput}
                 onChange={(e) => setKeywordInput(e.target.value)}
                 autoFocus
@@ -165,9 +211,10 @@ export default function AddKeywordModal() {
           </form>
 
           {error && <div className="credential-note">{error}</div>}
+          {progressText && <div className="credential-note">{progressText}</div>}
 
           {/* Suggestions */}
-          {suggestions.length > 0 && (
+          {suggestions.length > 0 && keywordTerms.length <= 1 && (
             <div style={{ marginTop: '8px' }}>
               <div
                 style={{
@@ -189,7 +236,7 @@ export default function AddKeywordModal() {
                 <div
                   key={suggestion}
                   className="search-result-item"
-                  onClick={() => void handleAddKeyword(suggestion)}
+                  onClick={() => void handleAddKeywords([suggestion])}
                   style={{ padding: '8px 10px' }}
                 >
                   <Plus size={14} style={{ color: 'var(--accent-primary)' }} />
@@ -238,11 +285,13 @@ export default function AddKeywordModal() {
           </button>
           <button
             className="btn btn-primary"
-            onClick={() => void handleAddKeyword(keywordInput)}
-            disabled={!keywordInput.trim() || isLoading}
+            onClick={() => void handleAddKeywords(keywordTerms)}
+            disabled={keywordTerms.length === 0 || isLoading}
           >
             <Plus size={14} />
-            {isLoading ? 'Checking rankings...' : 'Add Keyword'}
+            {isLoading
+              ? 'Checking rankings...'
+              : `Add ${keywordTerms.length || ''} Keyword${keywordTerms.length === 1 ? '' : 's'}`}
           </button>
         </div>
       </div>

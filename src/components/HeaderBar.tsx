@@ -93,8 +93,12 @@ export default function HeaderBar() {
             <button
               className="btn btn-secondary btn-icon tooltip"
               onClick={handleRefresh}
-              data-tooltip={refreshError || syncProgress.message || 'Refresh rankings'}
-              disabled={isRefreshing}
+              data-tooltip={
+                !selectedAppId
+                  ? 'Add an app first'
+                  : refreshError || syncProgress.message || 'Refresh rankings'
+              }
+              disabled={isRefreshing || !selectedAppId}
             >
               <RefreshCw
                 size={16}
@@ -127,13 +131,15 @@ export default function HeaderBar() {
             <button
               className="btn btn-secondary btn-icon tooltip"
               onClick={handleExport}
-              data-tooltip="Export CSV"
+              data-tooltip={selectedAppId ? 'Export CSV' : 'Add an app first'}
+              disabled={!selectedAppId}
             >
               <Download size={16} />
             </button>
             <button
               className="btn btn-warning"
               onClick={() => setKeywordResearchModalOpen(true)}
+              disabled={!selectedAppId}
             >
               <Lightbulb size={16} />
               Find Suggestions
@@ -141,6 +147,7 @@ export default function HeaderBar() {
             <button
               className="btn btn-primary"
               onClick={() => setAddKeywordModalOpen(true)}
+              disabled={!selectedAppId}
             >
               <Plus size={16} />
               Add Keywords

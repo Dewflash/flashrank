@@ -23,21 +23,37 @@ interface SuggestionRow {
   difficulty: TrackedKeyword['difficulty'];
   difficultyScore: number;
   position: number | null;
+  opportunityScore: number;
   topApps: AppMetadata[];
   rankingSignals: RankingSignals;
 }
 
-const MAX_ROWS = 18;
+const MAX_ROWS = 60;
 
 function uniqueKeywords(values: string[]): string[] {
   const seen = new Set<string>();
   return values
-    .map((value) => value.trim().toLowerCase())
+    .map((value) => value.toLowerCase().replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim())
     .filter((value) => {
       if (value.length < 2 || seen.has(value)) return false;
       seen.add(value);
       return true;
     });
+}
+
+function splitSeedInput(value: string): string[] {
+  return uniqueKeywords(value.split(/[,\n]/g));
+}
+
+function scoreOpportunity(
+  popularity: number,
+  difficultyScore: number,
+  position: number | null,
+  hasCompetitor: boolean
+): number {
+  const rankBonus = position === null ? 16 : Math.max(0, 16 - position);
+  const competitorBonus = hasCompetitor ? 8 : 0;
+  return Math.round(popularity * 0.7 + (100 - difficultyScore) * 0.3 + rankBonus + competitorBonus);
 }
 
 function seedTerms(appName: string, category: string): string[] {
@@ -85,12 +101,14 @@ export default function KeywordResearchModal() {
   const [rows, setRows] = useState<SuggestionRow[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
+  const [seedInput, setSeedInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const close = () => {
     setKeywordResearchModalOpen(false);
     setQuery('');
+    setSeedInput('');
     setError(null);
   };
 
@@ -135,20 +153,24 @@ export default function KeywordResearchModal() {
           const difficultyScore = calculateDifficultyScore(popularity, topRatings);
           const positionIndex = results.findIndex((app) => app.id === selectedApp.id);
           const rankingSignals = buildRankingSignals(results, selectedApp.id, competitors);
+          const hasCompetitor = Object.values(rankingSignals.competitorRanks).some((rank) => rank !== null);
+          const position = positionIndex === -1 ? null : positionIndex + 1;
 
           nextRows.push({
             keyword,
             popularity,
             difficulty: calculateDifficulty(popularity, topRatings),
             difficultyScore,
-            position: positionIndex === -1 ? null : positionIndex + 1,
+            position,
+            opportunityScore: scoreOpportunity(popularity, difficultyScore, position, hasCompetitor),
             topApps: results.slice(0, 8),
             rankingSignals,
           });
         }
 
-        setRows(nextRows);
-        setSelected(new Set(nextRows.slice(0, Math.min(5, nextRows.length)).map((row) => row.keyword)));
+        const sortedRows = nextRows.sort((a, b) => b.opportunityScore - a.opportunityScore);
+        setRows(sortedRows);
+        setSelected(new Set(sortedRows.slice(0, Math.min(5, sortedRows.length)).map((row) => row.keyword)));
       } catch {
         setRows([]);
         setError('Could not load keyword suggestions right now.');
@@ -168,9 +190,12 @@ export default function KeywordResearchModal() {
     return () => window.clearTimeout(timer);
   }, [buildRows, isKeywordResearchModalOpen, selectedApp]);
 
-  const filteredRows = rows.filter((row) =>
-    query.trim() ? row.keyword.includes(query.trim().toLowerCase()) : true
-  );
+  const filteredRows = rows.filter((row) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return normalizedQuery ? row.keyword.includes(normalizedQuery) : true;
+  });
+
+  const selectedRows = rows.filter((row) => selected.has(row.keyword));
 
   const toggle = (keyword: string) => {
     setSelected((current) => {
@@ -182,6 +207,26 @@ export default function KeywordResearchModal() {
       }
       return next;
     });
+  };
+
+  const selectVisibleRows = () => {
+    setSelected(new Set(filteredRows.map((row) => row.keyword)));
+  };
+
+  const selectTopRows = () => {
+    setSelected(new Set(filteredRows.slice(0, Math.min(100, filteredRows.length)).map((row) => row.keyword)));
+  };
+
+  const clearSelected = () => setSelected(new Set());
+
+  const runCustomSeeds = () => {
+    if (!selectedApp) return;
+    const seeds = splitSeedInput(seedInput);
+    if (seeds.length === 0) {
+      setError('Enter one or more seed keywords separated by commas.');
+      return;
+    }
+    void buildRows(seeds);
   };
 
   const addSelected = () => {
@@ -254,9 +299,61 @@ export default function KeywordResearchModal() {
                 placeholder="Search suggestions..."
               />
             </div>
+            <div className="keyword-seed-input">
+              <input
+                className="search-input"
+                value={seedInput}
+                onChange={(event) => setSeedInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    runCustomSeeds();
+                  }
+                }}
+                placeholder="Seed terms, comma separated"
+              />
+              <button className="btn btn-secondary" onClick={runCustomSeeds} disabled={isLoading}>
+                {isLoading ? <Loader2 size={14} className="spin" /> : <Search size={14} />}
+                Scan
+              </button>
+            </div>
             <span className="suggestions-count">
               {isLoading ? 'Searching...' : `Found ${rows.length} suggestions`}
             </span>
+          </div>
+
+          <div className="keyword-research-actions">
+            <div className="selected-keyword-chips">
+              {selectedRows.length === 0 ? (
+                <span className="selection-muted">No keywords selected</span>
+              ) : (
+                selectedRows.slice(0, 12).map((row) => (
+                  <button
+                    key={row.keyword}
+                    className="selected-keyword-chip"
+                    onClick={() => toggle(row.keyword)}
+                    title="Remove from selected"
+                  >
+                    {row.keyword}
+                    <X size={12} />
+                  </button>
+                ))
+              )}
+              {selectedRows.length > 12 && (
+                <span className="selection-muted">+{selectedRows.length - 12} more</span>
+              )}
+            </div>
+            <div className="keyword-bulk-actions">
+              <button className="btn btn-secondary" onClick={selectTopRows} disabled={filteredRows.length === 0}>
+                Select Top {Math.min(100, filteredRows.length) || ''}
+              </button>
+              <button className="btn btn-secondary" onClick={selectVisibleRows} disabled={filteredRows.length === 0}>
+                Select Visible
+              </button>
+              <button className="btn btn-ghost" onClick={clearSelected} disabled={selected.size === 0}>
+                Clear
+              </button>
+            </div>
           </div>
 
           {error && <div className="credential-note">{error}</div>}
@@ -277,6 +374,7 @@ export default function KeywordResearchModal() {
                     <th>Popularity</th>
                     <th>Difficulty</th>
                     <th>Position</th>
+                    <th>Opportunity</th>
                     <th>Apps in Ranking</th>
                   </tr>
                 </thead>
@@ -315,6 +413,9 @@ export default function KeywordResearchModal() {
                         ) : (
                           <span className="rank-value unranked">—</span>
                         )}
+                      </td>
+                      <td>
+                        <span className="source-pill verified">{row.opportunityScore}</span>
                       </td>
                       <td>
                         <div className="ranking-apps">
@@ -357,7 +458,7 @@ export default function KeywordResearchModal() {
           </button>
           <button className="btn btn-primary" onClick={addSelected} disabled={selected.size === 0}>
             <Plus size={14} />
-            Add {selected.size || ''} Keywords
+            Add {selected.size || ''} Keyword{selected.size === 1 ? '' : 's'}
           </button>
         </div>
       </div>

@@ -1374,13 +1374,22 @@ textarea {
 .keyword-research-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-sm);
   padding: var(--space-md) var(--space-lg);
   border-bottom: 1px solid var(--border-color);
 }
 
 .keyword-research-search {
-  width: min(420px, 100%);
+  width: min(360px, 100%);
+}
+
+.keyword-seed-input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: 1 1 360px;
+  min-width: 280px;
 }
 
 .suggestions-count {
@@ -1394,13 +1403,65 @@ textarea {
   white-space: nowrap;
 }
 
+.keyword-research-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.selected-keyword-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 32px;
+  min-width: 0;
+}
+
+.selected-keyword-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  max-width: 220px;
+  padding: 4px 8px;
+  border: 1px solid rgba(52, 199, 89, 0.28);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-success-bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.selected-keyword-chip svg {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+.selection-muted {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.keyword-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: 0 0 auto;
+}
+
 .keyword-research-table-wrap {
   max-height: min(58vh, 560px);
   overflow: auto;
 }
 
 .keyword-research-table {
-  min-width: 920px;
+  min-width: 1040px;
 }
 
 .select-dot {
@@ -1983,6 +2044,22 @@ textarea {
   .modal {
     width: calc(100vw - 24px) !important;
     max-height: 86vh;
+  }
+
+  .keyword-research-toolbar,
+  .keyword-research-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .keyword-research-search,
+  .keyword-seed-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .keyword-bulk-actions {
+    flex-wrap: wrap;
   }
 }
 
