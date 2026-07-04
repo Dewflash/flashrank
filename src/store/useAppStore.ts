@@ -8,6 +8,7 @@ import {
   KeywordTag,
   SortField,
   SortDirection,
+  SyncProgress,
   ViewMode,
 } from '@/types';
 import { seedApps, seedKeywords, seedTags } from '@/data/seedData';
@@ -48,6 +49,7 @@ interface AppActions {
   setAddAppModalOpen: (open: boolean) => void;
   setDetailPanelOpen: (open: boolean) => void;
   setRefreshing: (refreshing: boolean) => void;
+  setSyncProgress: (progress: Partial<SyncProgress>) => void;
   setApiKeys: (keys: Partial<AppState['apiKeys']>) => void;
 
   // Derived data
@@ -94,6 +96,13 @@ export const useAppStore = create<AppState & AppActions>()(
       isAddAppModalOpen: false,
       isDetailPanelOpen: false,
       isRefreshing: false,
+      syncProgress: {
+        status: 'idle',
+        total: 0,
+        completed: 0,
+        currentKeyword: null,
+        message: null,
+      },
       lastSyncTime: new Date().toISOString(),
       apiKeys: {
         ascIssuerId: '',
@@ -285,8 +294,15 @@ export const useAppStore = create<AppState & AppActions>()(
   setRefreshing: (refreshing) =>
     set({
       isRefreshing: refreshing,
-      ...(refreshing ? {} : { lastSyncTime: new Date().toISOString() }),
     }),
+
+  setSyncProgress: (progress) =>
+    set((state) => ({
+      syncProgress: {
+        ...state.syncProgress,
+        ...progress,
+      },
+    })),
 
   setApiKeys: (keys) =>
     set((state) => ({

@@ -18,6 +18,7 @@ export default function HeaderBar() {
     setAddKeywordModalOpen,
     setKeywordResearchModalOpen,
     isRefreshing,
+    syncProgress,
   } = useAppStore();
 
   const [refreshError, setRefreshError] = useState<string | null>(null);
@@ -92,7 +93,7 @@ export default function HeaderBar() {
             <button
               className="btn btn-secondary btn-icon tooltip"
               onClick={handleRefresh}
-              data-tooltip={refreshError || 'Refresh rankings'}
+              data-tooltip={refreshError || syncProgress.message || 'Refresh rankings'}
               disabled={isRefreshing}
             >
               <RefreshCw
@@ -103,6 +104,26 @@ export default function HeaderBar() {
                 }}
               />
             </button>
+            {isRefreshing && syncProgress.total > 0 && (
+              <div className="sync-progress-pill" title={syncProgress.message ?? undefined}>
+                <span>
+                  {syncProgress.completed}/{syncProgress.total}
+                </span>
+                <div className="sync-progress-track">
+                  <div
+                    className="sync-progress-fill"
+                    style={{
+                      width: `${Math.round((syncProgress.completed / syncProgress.total) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+            {!isRefreshing && syncProgress.status === 'error' && syncProgress.message && (
+              <div className="sync-error-pill" title={syncProgress.message}>
+                {syncProgress.message}
+              </div>
+            )}
             <button
               className="btn btn-secondary btn-icon tooltip"
               onClick={handleExport}

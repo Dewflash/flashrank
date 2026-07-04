@@ -151,6 +151,14 @@ export default function CompetitorsView() {
   const trackObservedCompetitor = async (snapshot: RankingAppSnapshot) => {
     if (!selectedAppId || !primaryApp || extractingId) return;
 
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setExtractMessages((current) => ({
+        ...current,
+        [snapshot.appId]: 'No Internet Connection. Competitor comparisons were not updated.',
+      }));
+      return;
+    }
+
     const competitor: TrackedApp = {
       id: snapshot.appId,
       name: snapshot.appName,
@@ -203,6 +211,14 @@ export default function CompetitorsView() {
 
   const extractCompetitorKeywords = async (competitor: TrackedApp) => {
     if (!selectedAppId || !primaryApp || extractingId) return;
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setExtractMessages((current) => ({
+        ...current,
+        [competitor.id]: 'No Internet Connection. Competitor keyword extraction was not started.',
+      }));
+      return;
+    }
 
     setExtractingId(competitor.id);
     setExtractMessages((current) => ({

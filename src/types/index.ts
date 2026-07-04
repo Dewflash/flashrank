@@ -125,6 +125,14 @@ export interface FilterState {
 
 export type ViewMode = 'keywords' | 'competitors' | 'overview' | 'ratings';
 
+export interface SyncProgress {
+  status: 'idle' | 'queued' | 'running' | 'complete' | 'error';
+  total: number;
+  completed: number;
+  currentKeyword: string | null;
+  message: string | null;
+}
+
 export interface AppState {
   // Apps
   apps: TrackedApp[];
@@ -147,6 +155,7 @@ export interface AppState {
   isAddAppModalOpen: boolean;
   isDetailPanelOpen: boolean;
   isRefreshing: boolean;
+  syncProgress: SyncProgress;
   lastSyncTime: string | null;
   
   // Tags

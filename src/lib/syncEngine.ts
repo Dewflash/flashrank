@@ -25,9 +25,21 @@ interface SyncOptions {
 
 export async function runBackgroundSync(options: SyncOptions = {}) {
   const store = useAppStore.getState();
-  const { apps, keywords, lastSyncTime, setRefreshing, apiKeys } = store;
+  const { apps, keywords, lastSyncTime, setRefreshing, setSyncProgress, apiKeys } = store;
 
   if (!options.force && !shouldSync(lastSyncTime)) {
+    return;
+  }
+
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    setRefreshing(false);
+    setSyncProgress({
+      status: 'error',
+      total: 0,
+      completed: 0,
+      currentKeyword: null,
+      message: 'No Internet Connection',
+    });
     return;
   }
 
@@ -41,6 +53,13 @@ export async function runBackgroundSync(options: SyncOptions = {}) {
 
   if (syncIndexes.length === 0) {
     setRefreshing(true);
+    setSyncProgress({
+      status: 'complete',
+      total: 0,
+      completed: 0,
+      currentKeyword: null,
+      message: 'No keywords queued for refresh.',
+    });
     // Just update the timestamp if there's nothing to sync
     useAppStore.setState({ lastSyncTime: new Date().toISOString() });
     setRefreshing(false);
@@ -48,9 +67,17 @@ export async function runBackgroundSync(options: SyncOptions = {}) {
   }
 
   setRefreshing(true);
+  setSyncProgress({
+    status: 'queued',
+    total: syncIndexes.length,
+    completed: 0,
+    currentKeyword: null,
+    message: `Queued ${syncIndexes.length} keyword${syncIndexes.length === 1 ? '' : 's'} for refresh.`,
+  });
 
   try {
     const updatedKeywords = [...keywords];
+    let failedCount = 0;
     const competitors = apps.filter((app) => {
       if (!app.isCompetitor) return false;
       if (options.region && app.region !== options.region) return false;
@@ -58,7 +85,15 @@ export async function runBackgroundSync(options: SyncOptions = {}) {
     });
     const hasSearchAdsCredentials = isProviderReady(apiKeys, 'appleSearchAds');
 
-    for (const { keyword: kw, index } of syncIndexes) {
+    for (const [queueIndex, { keyword: kw, index }] of syncIndexes.entries()) {
+      setSyncProgress({
+        status: 'running',
+        total: syncIndexes.length,
+        completed: queueIndex,
+        currentKeyword: kw.keyword,
+        message: `Refreshing ${queueIndex + 1} of ${syncIndexes.length}: ${kw.keyword}`,
+      });
+
       try {
         // Fetch true popularity if Search Ads keys are available
         let truePopularity = kw.popularity;
@@ -100,8 +135,23 @@ export async function runBackgroundSync(options: SyncOptions = {}) {
 
         // Sleep to avoid rate limiting from iTunes API
         await new Promise((resolve) => setTimeout(resolve, 500));
+        setSyncProgress({
+          status: 'running',
+          total: syncIndexes.length,
+          completed: queueIndex + 1,
+          currentKeyword: kw.keyword,
+          message: `Refreshed ${queueIndex + 1} of ${syncIndexes.length}: ${kw.keyword}`,
+        });
       } catch (e) {
+        failedCount += 1;
         console.error(`Failed to sync keyword: ${kw.keyword}`, e);
+        setSyncProgress({
+          status: 'running',
+          total: syncIndexes.length,
+          completed: queueIndex + 1,
+          currentKeyword: kw.keyword,
+          message: `Skipped ${kw.keyword}; ranking data was unavailable.`,
+        });
       }
     }
 
@@ -109,8 +159,26 @@ export async function runBackgroundSync(options: SyncOptions = {}) {
       keywords: updatedKeywords,
       lastSyncTime: new Date().toISOString(),
     });
+
+    setSyncProgress({
+      status: failedCount > 0 ? 'error' : 'complete',
+      total: syncIndexes.length,
+      completed: syncIndexes.length,
+      currentKeyword: null,
+      message:
+        failedCount > 0
+          ? `${failedCount} keyword${failedCount === 1 ? '' : 's'} could not be refreshed. Previous ranks were preserved.`
+          : `Refreshed ${syncIndexes.length} keyword${syncIndexes.length === 1 ? '' : 's'}.`,
+    });
   } catch (err) {
     console.error('Background sync failed', err);
+    setSyncProgress({
+      status: 'error',
+      total: syncIndexes.length,
+      completed: 0,
+      currentKeyword: null,
+      message: 'Refresh failed. Previous ranks were preserved.',
+    });
   } finally {
     setRefreshing(false);
   }

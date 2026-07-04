@@ -27,6 +27,7 @@ export default function AddKeywordModal() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchSuggestions = useCallback(
     async (term: string) => {
@@ -64,52 +65,63 @@ export default function AddKeywordModal() {
 
     const normalizedKeyword = keyword.trim().toLowerCase();
     setIsLoading(true);
-    const competitors = apps.filter(
-      (app) => app.isCompetitor && app.region === selectedRegion
-    );
-    const rankingSignals = await fetchRankingSignals(
-      normalizedKeyword,
-      selectedAppId,
-      selectedRegion,
-      competitors,
-      100
-    );
-    const popularity = calculatePopularity(normalizedKeyword);
-    const difficulty = calculateDifficulty(popularity, rankingSignals.topRatings);
-    const difficultyScore = calculateDifficultyScore(popularity, rankingSignals.topRatings);
+    setError(null);
 
-    const newKeyword: TrackedKeyword = {
-      id: `kw-${selectedRegion}-${selectedAppId}-${slugifyKeyword(normalizedKeyword)}`,
-      keyword: normalizedKeyword,
-      appId: selectedAppId,
-      region: selectedRegion,
-      popularity,
-      difficulty,
-      difficultyScore,
-      currentRank: rankingSignals.currentRank,
-      previousRank: null,
-      rankChange: null,
-      tags: tags.filter((t) => selectedTags.includes(t.id)),
-      note: null,
-      rankHistory: [
-        {
-          date: new Date().toISOString(),
-          rank: rankingSignals.currentRank,
-        },
-      ],
-      competitorRanks: rankingSignals.competitorRanks,
-      rankingApps: rankingSignals.rankingApps,
-      popularitySource: 'estimated',
-      difficultySource: 'itunes-search',
-      rankSource: 'itunes-search',
-      lastUpdated: new Date().toISOString(),
-      addedAt: new Date().toISOString(),
-    };
+    try {
+      const competitors = apps.filter(
+        (app) => app.isCompetitor && app.region === selectedRegion
+      );
+      const rankingSignals = await fetchRankingSignals(
+        normalizedKeyword,
+        selectedAppId,
+        selectedRegion,
+        competitors,
+        100
+      );
 
-    addKeyword(newKeyword);
-    setKeywordInput('');
-    setSuggestions([]);
-    setIsLoading(false);
+      if (rankingSignals.sourceStatus === 'error') {
+        setError('No Internet Connection. Keyword was not added because ranking data could not be checked.');
+        return;
+      }
+
+      const popularity = calculatePopularity(normalizedKeyword);
+      const difficulty = calculateDifficulty(popularity, rankingSignals.topRatings);
+      const difficultyScore = calculateDifficultyScore(popularity, rankingSignals.topRatings);
+
+      const newKeyword: TrackedKeyword = {
+        id: `kw-${selectedRegion}-${selectedAppId}-${slugifyKeyword(normalizedKeyword)}`,
+        keyword: normalizedKeyword,
+        appId: selectedAppId,
+        region: selectedRegion,
+        popularity,
+        difficulty,
+        difficultyScore,
+        currentRank: rankingSignals.currentRank,
+        previousRank: null,
+        rankChange: null,
+        tags: tags.filter((t) => selectedTags.includes(t.id)),
+        note: null,
+        rankHistory: [
+          {
+            date: new Date().toISOString(),
+            rank: rankingSignals.currentRank,
+          },
+        ],
+        competitorRanks: rankingSignals.competitorRanks,
+        rankingApps: rankingSignals.rankingApps,
+        popularitySource: 'estimated',
+        difficultySource: 'itunes-search',
+        rankSource: 'itunes-search',
+        lastUpdated: new Date().toISOString(),
+        addedAt: new Date().toISOString(),
+      };
+
+      addKeyword(newKeyword);
+      setKeywordInput('');
+      setSuggestions([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -122,6 +134,7 @@ export default function AddKeywordModal() {
     setKeywordInput('');
     setSuggestions([]);
     setSelectedTags([]);
+    setError(null);
   };
 
   if (!isAddKeywordModalOpen) return null;
@@ -150,6 +163,8 @@ export default function AddKeywordModal() {
               />
             </div>
           </form>
+
+          {error && <div className="credential-note">{error}</div>}
 
           {/* Suggestions */}
           {suggestions.length > 0 && (

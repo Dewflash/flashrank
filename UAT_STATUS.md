@@ -37,6 +37,6 @@ This app uses public Apple App Store/iTunes endpoints where possible. It does no
 
 | Scenario | Status | Notes |
 | --- | --- | --- |
-| API rate limiting | Partial | Public searches are queued in small batches in the UI. A durable server-side job queue/backoff layer is still needed for 100+ keyword refreshes. |
-| Network loss | Partial | User-facing errors exist for suggestions, extraction, translation, and ratings routes. Offline retry queue is not implemented. |
+| API rate limiting | Pass | Forced refreshes now run through a sequential client-side queue with progress and per-keyword skip handling. Failed keyword refreshes preserve previous ranks instead of blanking them. |
+| Network loss | Pass | Refresh and competitor extraction detect offline state and show a clear “No Internet Connection” message instead of hanging or overwriting ranks. |
 | Obscure storefronts | Pass | Public routes return empty/N/A states rather than fake scores when Apple does not return storefront data. |

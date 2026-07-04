@@ -32,6 +32,7 @@ No keys are required for the public App Store pieces:
 - Track keyword rank snapshots by region.
 - Compare competitor ranks in the same keyword result set.
 - Generate keyword suggestions and estimated popularity/difficulty.
+- Refresh keyword rankings through a visible queue that preserves previous ranks if Apple data is unavailable.
 - Export and local workspace state.
 
 Apple does not expose every TryAstro-style metric for free. Impressions, downloads, product page analytics, real Search Ads popularity, and private app analytics need authenticated Apple APIs.

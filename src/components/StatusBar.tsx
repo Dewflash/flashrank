@@ -5,7 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { Command } from 'lucide-react';
 
 export default function StatusBar() {
-  const { keywords, selectedAppId, selectedKeywordId } = useAppStore();
+  const { keywords, selectedAppId, selectedKeywordId, isRefreshing, syncProgress } = useAppStore();
   const appKeywords = keywords.filter((k) => k.appId === selectedAppId);
   const rankedCount = appKeywords.filter((k) => k.currentRank !== null).length;
 
@@ -28,6 +28,24 @@ export default function StatusBar() {
         <span>{appKeywords.length} keywords tracked</span>
         <span>·</span>
         <span>{rankedCount} ranked</span>
+        {(isRefreshing || syncProgress.status === 'error' || syncProgress.status === 'complete') &&
+          syncProgress.message && (
+            <>
+              <span>·</span>
+              <span
+                style={{
+                  color:
+                    syncProgress.status === 'error'
+                      ? 'var(--color-danger)'
+                      : isRefreshing
+                        ? 'var(--accent-primary-hover)'
+                        : 'var(--text-secondary)',
+                }}
+              >
+                {syncProgress.message}
+              </span>
+            </>
+          )}
         {selectedKeywordId && (
           <>
             <span>·</span>

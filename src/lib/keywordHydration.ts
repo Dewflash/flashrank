@@ -27,6 +27,7 @@ export interface RankingSignals {
   currentRank: number | null;
   competitorRanks: Record<string, number | null>;
   topRatings: number[];
+  sourceStatus: 'ok' | 'error';
 }
 
 const BLOCKED_TERMS = new Set(['suggestions', 'software', 'itunes', 'app store', 'search']);
@@ -108,6 +109,7 @@ export function buildRankingSignals(
     currentRank: selectedIndex === -1 ? null : selectedIndex + 1,
     competitorRanks,
     topRatings: results.slice(0, 10).map((app) => app.ratingCount),
+    sourceStatus: 'ok',
   };
 }
 
@@ -122,7 +124,16 @@ export async function fetchRankingSignals(
   try {
     results = await searchApps(keyword, region, limit);
   } catch {
-    results = [];
+    return {
+      rankingApps: [],
+      currentRank: null,
+      competitorRanks: competitors.reduce<Record<string, number | null>>((acc, competitor) => {
+        acc[competitor.id] = null;
+        return acc;
+      }, {}),
+      topRatings: [],
+      sourceStatus: 'error',
+    };
   }
 
   return buildRankingSignals(results, selectedAppId, competitors);
@@ -150,6 +161,10 @@ export async function hydrateKeywordRanking(
   options: { appendHistory?: boolean } = {}
 ): Promise<TrackedKeyword> {
   const signals = await fetchRankingSignals(keyword.keyword, selectedAppId, region, competitors, 100);
+  if (signals.sourceStatus === 'error') {
+    throw new Error(`Ranking search failed for "${keyword.keyword}"`);
+  }
+
   const popularity = keyword.popularity;
   const difficultyScore = calculateDifficultyScore(popularity, signals.topRatings);
   const previousRank = keyword.currentRank;

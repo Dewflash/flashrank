@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import { runBackgroundSync } from '@/lib/syncEngine';
 
 /**
  * Global keyboard shortcut handler for FlashRank's macOS-style shortcuts.
@@ -11,17 +12,15 @@ export default function KeyboardShortcuts() {
     setAddKeywordModalOpen,
     setAddAppModalOpen,
     setViewMode,
-    setSearchFilter,
     isAddKeywordModalOpen,
     isAddAppModalOpen,
     selectedKeywordId,
     setSelectedKeyword,
     setDetailPanelOpen,
     removeKeyword,
-    setRefreshing,
     keywords,
     selectedAppId,
-    filter,
+    selectedRegion,
   } = useAppStore();
 
   const handleKeyDown = useCallback(
@@ -82,8 +81,11 @@ export default function KeyboardShortcuts() {
       // ⌘+R — Refresh data
       if (isMeta && e.key === 'r') {
         e.preventDefault();
-        setRefreshing(true);
-        setTimeout(() => setRefreshing(false), 2000);
+        void runBackgroundSync({
+          force: true,
+          appId: selectedAppId,
+          region: selectedRegion,
+        });
         return;
       }
 
@@ -138,15 +140,13 @@ export default function KeyboardShortcuts() {
       selectedKeywordId,
       keywords,
       selectedAppId,
-      filter,
+      selectedRegion,
       setAddKeywordModalOpen,
       setAddAppModalOpen,
       setViewMode,
-      setSearchFilter,
       setSelectedKeyword,
       setDetailPanelOpen,
       removeKeyword,
-      setRefreshing,
     ]
   );
 
