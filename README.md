@@ -2,7 +2,7 @@
 
 A desktop-style ASO studio for tracking App Store keyword ranks, popularity, difficulty, competitors, notes, and region-specific keyword sets.
 
-The default workspace is seeded with Hay Day and the farming competitors you supplied so the app opens into a useful ASO board immediately.
+The default workspace starts empty so user-added apps are never mixed with bundled demo data. Add an app to hydrate starter keywords from public Apple data.
 
 ## Run locally
 

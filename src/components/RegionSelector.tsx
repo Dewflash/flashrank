@@ -50,8 +50,6 @@ interface RegionSelectorProps {
 }
 
 export default function RegionSelector({ value, onChange }: RegionSelectorProps) {
-  const selected = REGIONS.find((r) => r.code === value);
-
   return (
     <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
       <Globe size={14} style={{ position: 'absolute', left: '8px', color: 'var(--text-tertiary)', pointerEvents: 'none', zIndex: 1 }} />

@@ -9,9 +9,10 @@ import {
   SortField,
   SortDirection,
   SyncProgress,
+  AppImportProgress,
   ViewMode,
 } from '@/types';
-import { seedApps, seedKeywords, seedTags } from '@/data/seedData';
+import { legacyDemoAppIds, seedTags } from '@/data/seedData';
 import { isBlockedKeyword } from '@/lib/keywordHydration';
 
 // ─── Action types ───────────────────────────────────────────────────────────
@@ -44,11 +45,14 @@ interface AppActions {
 
   // UI state
   toggleSidebar: () => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   setAddKeywordModalOpen: (open: boolean) => void;
   setKeywordResearchModalOpen: (open: boolean) => void;
   setAddAppModalOpen: (open: boolean) => void;
+  setAddAppMode: (mode: AppState['addAppMode']) => void;
   setDetailPanelOpen: (open: boolean) => void;
   setRefreshing: (refreshing: boolean) => void;
+  setAppImportProgress: (key: string, progress: Partial<AppImportProgress>) => void;
   setSyncProgress: (progress: Partial<SyncProgress>) => void;
   setApiKeys: (keys: Partial<AppState['apiKeys']>) => void;
 
@@ -77,15 +81,40 @@ function sanitizeKeywords(keywords: TrackedKeyword[] | undefined): TrackedKeywor
   return Array.from(byIdentity.values());
 }
 
+function removeBundledDemoData(state: Partial<AppState>): Partial<AppState> {
+  const apps = Array.isArray(state.apps) ? state.apps : [];
+  const keywords = Array.isArray(state.keywords) ? state.keywords : [];
+  const nonDemoApps = apps.filter((app) => !legacyDemoAppIds.has(app.id));
+  const demoOnly = apps.length > 0 && nonDemoApps.length === 0;
+
+  if (apps.length === 0 || (!demoOnly && nonDemoApps.length === apps.length)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    apps: nonDemoApps,
+    keywords: keywords.filter((keyword) => !legacyDemoAppIds.has(keyword.appId)),
+    selectedAppId:
+      state.selectedAppId && !legacyDemoAppIds.has(state.selectedAppId)
+        ? state.selectedAppId
+        : nonDemoApps[0]?.id ?? null,
+  };
+}
+
+export function appScopeKey(appId: string | null | undefined, region: string | null | undefined): string {
+  return `${region ?? 'us'}:${appId ?? 'none'}`;
+}
+
 export const useAppStore = create<AppState & AppActions>()(
   persist(
     (set, get) => ({
       // ── Initial state ──────────────────────────────────────────
 
-      apps: seedApps,
-      selectedAppId: '506627515',
+      apps: [],
+      selectedAppId: null,
       selectedRegion: 'sg',
-      keywords: seedKeywords,
+      keywords: [],
       selectedKeywordId: null,
       viewMode: 'keywords',
       sort: { field: 'popularity', direction: 'desc' },
@@ -94,8 +123,10 @@ export const useAppStore = create<AppState & AppActions>()(
       isAddKeywordModalOpen: false,
       isKeywordResearchModalOpen: false,
       isAddAppModalOpen: false,
+      addAppMode: 'mine',
       isDetailPanelOpen: false,
       isRefreshing: false,
+      appImportProgress: {},
       syncProgress: {
         status: 'idle',
         total: 0,
@@ -283,11 +314,16 @@ export const useAppStore = create<AppState & AppActions>()(
   toggleSidebar: () =>
     set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
 
+  setSidebarCollapsed: (collapsed) =>
+    set({ isSidebarCollapsed: collapsed }),
+
   setAddKeywordModalOpen: (open) => set({ isAddKeywordModalOpen: open }),
 
   setKeywordResearchModalOpen: (open) => set({ isKeywordResearchModalOpen: open }),
 
   setAddAppModalOpen: (open) => set({ isAddAppModalOpen: open }),
+
+  setAddAppMode: (mode) => set({ addAppMode: mode }),
 
   setDetailPanelOpen: (open) => set({ isDetailPanelOpen: open }),
 
@@ -295,6 +331,22 @@ export const useAppStore = create<AppState & AppActions>()(
     set({
       isRefreshing: refreshing,
     }),
+
+  setAppImportProgress: (key, progress) =>
+    set((state) => ({
+      appImportProgress: {
+        ...state.appImportProgress,
+        [key]: {
+          ...(state.appImportProgress[key] ?? {
+            status: 'idle',
+            message: null,
+            keywordCount: 0,
+            updatedAt: null,
+          }),
+          ...progress,
+        },
+      },
+    })),
 
   setSyncProgress: (progress) =>
     set((state) => ({
@@ -393,12 +445,14 @@ export const useAppStore = create<AppState & AppActions>()(
 }),
 {
   name: 'flashrank-storage', // key in localStorage
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState) => {
-        const state = persistedState as Partial<AppState>;
+        const state = removeBundledDemoData(persistedState as Partial<AppState>);
         return {
           ...state,
+          appImportProgress: state.appImportProgress ?? {},
+          addAppMode: state.addAppMode ?? 'mine',
           keywords: sanitizeKeywords(state.keywords),
         };
       },
@@ -412,6 +466,7 @@ export const useAppStore = create<AppState & AppActions>()(
         viewMode: state.viewMode,
         sort: state.sort,
         isSidebarCollapsed: state.isSidebarCollapsed,
+        appImportProgress: state.appImportProgress,
         lastSyncTime: state.lastSyncTime,
         apiKeys: state.apiKeys,
       }),

@@ -11,8 +11,9 @@ import {
   ChevronUp,
   ChevronDown,
   Lightbulb,
+  Loader2,
 } from 'lucide-react';
-import { useAppStore } from '@/store/useAppStore';
+import { appScopeKey, useAppStore } from '@/store/useAppStore';
 import type { RankingAppSnapshot, TrackedKeyword, SortField } from '@/types';
 import ContextMenu from '@/components/ContextMenu';
 import { runBackgroundSync } from '@/lib/syncEngine';
@@ -99,6 +100,7 @@ export default function KeywordTable() {
     setSort,
     filter,
     isRefreshing,
+    appImportProgress,
   } = useAppStore();
 
   const [contextMenu, setContextMenu] = useState<{
@@ -108,6 +110,8 @@ export default function KeywordTable() {
   } | null>(null);
   const [now, setNow] = useState<number | null>(null);
   const [autoHydrateKey, setAutoHydrateKey] = useState<string | null>(null);
+  const currentImportProgress = appImportProgress[appScopeKey(selectedAppId, selectedRegion)];
+  const isImportingApp = currentImportProgress?.status === 'loading';
 
   useEffect(() => {
     setNow(Date.now());
@@ -276,28 +280,45 @@ export default function KeywordTable() {
   };
 
   if (sorted.length === 0) {
+    const title = !selectedAppId
+      ? 'Add an app first'
+      : isImportingApp
+        ? 'Preparing keyword workspace'
+        : currentImportProgress?.status === 'error'
+          ? 'Keyword import needs attention'
+          : 'No keywords found';
+    const text = !selectedAppId
+      ? 'Search the App Store to choose an app before tracking keywords.'
+      : isImportingApp
+        ? currentImportProgress.message ?? 'Checking public Apple suggestions and ranking results.'
+        : currentImportProgress?.status === 'error'
+          ? currentImportProgress.message ?? 'Starter keywords could not be loaded.'
+          : filter.search
+            ? 'Try adjusting your search filter'
+            : 'Find suggestions or add keywords manually to start tracking.';
+
     return (
       <div className="empty-state" style={{ flex: 1 }}>
         <div className="empty-state-icon">
-          <svg
-            width="48"
-            height="48"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
+          {isImportingApp ? (
+            <Loader2 className="spin" size={48} />
+          ) : (
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+          )}
         </div>
-        <div className="empty-state-title">No keywords found</div>
-        <div className="empty-state-text">
-          {filter.search
-            ? 'Try adjusting your search filter'
-            : 'Find suggestions or add keywords manually to start tracking.'}
-        </div>
-        {!filter.search && (
+        <div className="empty-state-title">{title}</div>
+        <div className="empty-state-text">{text}</div>
+        {selectedAppId && !filter.search && !isImportingApp && (
           <button
             className="btn btn-warning"
             style={{ marginTop: 16 }}
@@ -313,6 +334,20 @@ export default function KeywordTable() {
 
   return (
     <div className="table-container">
+      {currentImportProgress?.message && (
+        <div
+          className="credential-note"
+          style={{
+            margin: 'var(--space-sm) var(--space-md)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          {isImportingApp && <Loader2 className="spin" size={14} />}
+          <span>{currentImportProgress.message}</span>
+        </div>
+      )}
       <table className="data-table">
         <thead>
           <tr>

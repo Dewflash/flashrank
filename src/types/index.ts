@@ -125,6 +125,13 @@ export interface FilterState {
 
 export type ViewMode = 'keywords' | 'competitors' | 'overview' | 'ratings';
 
+export interface AppImportProgress {
+  status: 'idle' | 'loading' | 'complete' | 'error';
+  message: string | null;
+  keywordCount: number;
+  updatedAt: string | null;
+}
+
 export interface SyncProgress {
   status: 'idle' | 'queued' | 'running' | 'complete' | 'error';
   total: number;
@@ -153,8 +160,10 @@ export interface AppState {
   isAddKeywordModalOpen: boolean;
   isKeywordResearchModalOpen: boolean;
   isAddAppModalOpen: boolean;
+  addAppMode: 'mine' | 'competitor';
   isDetailPanelOpen: boolean;
   isRefreshing: boolean;
+  appImportProgress: Record<string, AppImportProgress>;
   syncProgress: SyncProgress;
   lastSyncTime: string | null;
   

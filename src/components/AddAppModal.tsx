@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import { X, Search } from 'lucide-react';
-import { useAppStore } from '@/store/useAppStore';
+import { appScopeKey, useAppStore } from '@/store/useAppStore';
 import type { AppMetadata, TrackedApp } from '@/types';
 import { searchApps } from '@/lib/api';
 import {
@@ -14,6 +14,9 @@ export default function AddAppModal() {
   const {
     isAddAppModalOpen,
     setAddAppModalOpen,
+    addAppMode,
+    setAddAppMode,
+    setAppImportProgress,
     addApp,
     setSelectedApp,
     setViewMode,
@@ -33,8 +36,8 @@ export default function AddAppModal() {
   const [results, setResults] = useState<AppMetadata[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
-  const [addAsCompetitor, setAddAsCompetitor] = useState(false);
   const latestSearchId = useRef(0);
+  const addAsCompetitor = addAppMode === 'competitor';
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,8 +77,16 @@ export default function AddAppModal() {
     try {
       addApp(trackedApp);
       if (!addAsCompetitor) {
+        const importKey = appScopeKey(trackedApp.id, selectedRegion);
         setSelectedApp(trackedApp.id);
         setViewMode('keywords');
+        setAppImportProgress(importKey, {
+          status: 'loading',
+          message: `Preparing ${trackedApp.name} keyword workspace from public App Store data...`,
+          keywordCount: 0,
+          updatedAt: new Date().toISOString(),
+        });
+
         const competitors = apps.filter(
           (existingApp) => existingApp.isCompetitor && existingApp.region === selectedRegion
         );
@@ -89,8 +100,22 @@ export default function AddAppModal() {
             limit: 10,
           });
           starterKeywords.forEach(addKeyword);
+          setAppImportProgress(importKey, {
+            status: 'complete',
+            message:
+              starterKeywords.length > 0
+                ? `Added ${starterKeywords.length} starter keyword${starterKeywords.length === 1 ? '' : 's'} from public Apple results.`
+                : 'No starter keywords were found. Use Find Suggestions or add keywords manually.',
+            keywordCount: starterKeywords.length,
+            updatedAt: new Date().toISOString(),
+          });
         } catch {
-          // The suggestions modal still opens so the user can retry manually.
+          setAppImportProgress(importKey, {
+            status: 'error',
+            message: 'Could not prepare starter keywords. Use Find Suggestions or add keywords manually.',
+            keywordCount: 0,
+            updatedAt: new Date().toISOString(),
+          });
         }
         window.setTimeout(() => setKeywordResearchModalOpen(true), 120);
       } else if (selectedAppId) {
@@ -130,7 +155,7 @@ export default function AddAppModal() {
     setSearchTerm('');
     setSubmittedTerm('');
     setResults([]);
-    setAddAsCompetitor(false);
+    setAddAppMode('mine');
     setIsAdding(false);
   };
 
@@ -163,14 +188,14 @@ export default function AddAppModal() {
           >
             <button
               className={`btn ${!addAsCompetitor ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setAddAsCompetitor(false)}
+              onClick={() => setAddAppMode('mine')}
               style={{ flex: 1, justifyContent: 'center' }}
             >
               My App
             </button>
             <button
               className={`btn ${addAsCompetitor ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setAddAsCompetitor(true)}
+              onClick={() => setAddAppMode('competitor')}
               style={{ flex: 1, justifyContent: 'center' }}
             >
               Competitor

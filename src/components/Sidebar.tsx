@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   BarChart3,
   Search,
@@ -23,7 +23,6 @@ export default function Sidebar() {
     apps,
     selectedAppId,
     selectedRegion,
-    setSelectedApp,
     viewMode,
     setViewMode,
     keywords,
@@ -31,6 +30,7 @@ export default function Sidebar() {
     isSidebarCollapsed,
     toggleSidebar,
     setAddAppModalOpen,
+    setAddAppMode,
     isRefreshing,
     lastSyncTime,
     filter,
@@ -58,18 +58,19 @@ export default function Sidebar() {
     return date.toLocaleDateString();
   };
 
-  useEffect(() => {
-    if (
-      typeof window !== 'undefined' &&
-      window.matchMedia('(max-width: 720px)').matches &&
-      !isSidebarCollapsed
-    ) {
-      toggleSidebar();
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
+  const handleSidebarToggle = () => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches) {
+      setIsMobileNavOpen((open) => !open);
+      return;
     }
-  }, [isSidebarCollapsed, toggleSidebar]);
+
+    toggleSidebar();
+  };
 
   return (
-    <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
+    <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileNavOpen ? 'mobile-open' : ''}`}>
       {/* Header */}
       <div className="sidebar-header">
         <div className="sidebar-logo">F</div>
@@ -79,10 +80,10 @@ export default function Sidebar() {
         </div>
         <button
           className="btn btn-ghost btn-icon"
-          onClick={toggleSidebar}
+          onClick={handleSidebarToggle}
           style={{ marginLeft: 'auto' }}
         >
-          {isSidebarCollapsed ? (
+          {isSidebarCollapsed || !isMobileNavOpen ? (
             <ChevronRight size={16} />
           ) : (
             <ChevronLeft size={16} />
@@ -94,7 +95,10 @@ export default function Sidebar() {
       <div className="app-selector">
         <button
           className="app-selector-btn"
-          onClick={() => setAddAppModalOpen(true)}
+          onClick={() => {
+            setAddAppMode('mine');
+            setAddAppModalOpen(true);
+          }}
         >
           {selectedApp ? (
             <>

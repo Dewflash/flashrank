@@ -54,6 +54,7 @@ export default function CompetitorsView() {
     addApp,
     removeApp,
     setAddAppModalOpen,
+    setAddAppMode,
     addKeyword,
     upsertKeywords,
     tags,
@@ -67,6 +68,22 @@ export default function CompetitorsView() {
     (k) => k.appId === selectedAppId && k.region === selectedRegion
   );
   const competitorTag = tags.find((tag) => tag.name.toLowerCase() === 'competitor');
+
+  const strongestCompetitorForKeyword = React.useCallback(
+    (keyword: TrackedKeyword) => {
+      return competitors
+        .map((competitor) => {
+          const rank =
+            keyword.competitorRanks?.[competitor.id] ??
+            keyword.rankingApps?.find((app) => app.appId === competitor.id)?.rank ??
+            null;
+          return rank === null ? null : { competitor, rank };
+        })
+        .filter((value): value is { competitor: TrackedApp; rank: number } => value !== null)
+        .sort((a, b) => a.rank - b.rank)[0] ?? null;
+    },
+    [competitors]
+  );
 
   const competitorStats = React.useMemo(() => {
     return new Map(
@@ -408,7 +425,10 @@ export default function CompetitorsView() {
         </div>
         <button
           className="btn btn-primary"
-          onClick={() => setAddAppModalOpen(true)}
+          onClick={() => {
+            setAddAppMode('competitor');
+            setAddAppModalOpen(true);
+          }}
         >
           <Plus size={14} />
           Add Competitor
@@ -431,7 +451,10 @@ export default function CompetitorsView() {
           <button
             className="btn btn-primary"
             style={{ marginTop: '16px' }}
-            onClick={() => setAddAppModalOpen(true)}
+            onClick={() => {
+              setAddAppMode('competitor');
+              setAddAppModalOpen(true);
+            }}
           >
             <Plus size={14} />
             Add your first competitor
@@ -513,7 +536,7 @@ export default function CompetitorsView() {
                 >
                   <div>
                     <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
-                      Shared
+                      Shared Keywords
                     </div>
                     <div style={{ fontSize: '16px', fontWeight: 600 }}>
                       {competitorStats.get(comp.id)?.shared ?? 0}
@@ -591,78 +614,128 @@ export default function CompetitorsView() {
                     {competitors.map((comp) => (
                       <th key={comp.id}>{comp.name}</th>
                     ))}
+                    <th>Best Competitor</th>
+                    <th>Gap</th>
                     <th>Popularity</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {appKeywords.map((kw) => (
-                    <tr key={kw.id}>
-                      <td>
-                        <span className="keyword-text">{kw.keyword}</span>
-                      </td>
-                      <td>
-                        <div className="rank-cell">
-                          {kw.currentRank ? (
-                            <span className={`rank-value ${kw.currentRank <= 3 ? `rank-${kw.currentRank}` : ''}`}>
-                              #{kw.currentRank}
-                            </span>
-                          ) : (
-                            <span className="rank-value unranked">—</span>
-                          )}
-                          {kw.rankChange !== null && kw.rankChange !== 0 && (
-                            <span
-                              className={`rank-change ${kw.rankChange > 0 ? 'up' : 'down'}`}
-                            >
-                              {kw.rankChange > 0 ? (
-                                <ArrowUp size={10} />
-                              ) : (
-                                <ArrowDown size={10} />
-                              )}
-                              {Math.abs(kw.rankChange)}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      {competitors.map((comp) => {
-                        const competitorRank =
-                          kw.competitorRanks?.[comp.id] ??
-                          kw.rankingApps?.find((app) => app.appId === comp.id)?.rank ??
-                          null;
-                        return (
-                          <td key={comp.id}>
-                            {competitorRank ? (
-                              <span className={`rank-value ${competitorRank <= 3 ? `rank-${competitorRank}` : ''}`}>
-                                #{competitorRank}
+                  {appKeywords.map((kw) => {
+                    const strongest = strongestCompetitorForKeyword(kw);
+                    const gap =
+                      strongest && kw.currentRank !== null
+                        ? kw.currentRank - strongest.rank
+                        : null;
+
+                    return (
+                      <tr key={kw.id}>
+                        <td>
+                          <span className="keyword-text">{kw.keyword}</span>
+                        </td>
+                        <td>
+                          <div className="rank-cell">
+                            {kw.currentRank ? (
+                              <span className={`rank-value ${kw.currentRank <= 3 ? `rank-${kw.currentRank}` : ''}`}>
+                                #{kw.currentRank}
                               </span>
                             ) : (
                               <span className="rank-value unranked">—</span>
                             )}
-                          </td>
-                        );
-                      })}
-                      <td>
-                        <div className="popularity-cell">
-                          <div className="popularity-bar-container">
-                            <div
-                              className="popularity-bar"
-                              style={{
-                                width: `${kw.popularity}%`,
-                                background:
-                                  kw.popularity >= 70
-                                    ? 'var(--color-success)'
-                                    : kw.popularity >= 40
-                                      ? 'var(--accent-primary)'
-                                      : 'var(--color-warning)',
-                              }}
-                            />
+                            {kw.rankChange !== null && kw.rankChange !== 0 && (
+                              <span
+                                className={`rank-change ${kw.rankChange > 0 ? 'up' : 'down'}`}
+                              >
+                                {kw.rankChange > 0 ? (
+                                  <ArrowUp size={10} />
+                                ) : (
+                                  <ArrowDown size={10} />
+                                )}
+                                {Math.abs(kw.rankChange)}
+                              </span>
+                            )}
                           </div>
-                          <span className="popularity-value">
-                            {kw.popularity}
-                          </span>
-                        </div>
+                        </td>
+                        {competitors.map((comp) => {
+                          const competitorRank =
+                            kw.competitorRanks?.[comp.id] ??
+                            kw.rankingApps?.find((app) => app.appId === comp.id)?.rank ??
+                            null;
+                          return (
+                            <td key={comp.id}>
+                              {competitorRank ? (
+                                <span className={`rank-value ${competitorRank <= 3 ? `rank-${competitorRank}` : ''}`}>
+                                  #{competitorRank}
+                                </span>
+                              ) : (
+                                <span className="rank-value unranked">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td>
+                          {strongest ? (
+                            <div className="competitor-mini">
+                              {strongest.competitor.icon ? (
+                                <img src={strongest.competitor.icon} alt="" className="ranking-app-icon" />
+                              ) : (
+                                <span className="ranking-app-icon placeholder">
+                                  {strongest.competitor.name.charAt(0)}
+                                </span>
+                              )}
+                              <span>#{strongest.rank}</span>
+                            </div>
+                          ) : (
+                            <span className="rank-value unranked">—</span>
+                          )}
+                        </td>
+                        <td>
+                          {gap === null ? (
+                            <span className="rank-value unranked">—</span>
+                          ) : gap > 0 ? (
+                            <span className="rank-change down">
+                              <ArrowDown size={12} />
+                              {gap} behind
+                            </span>
+                          ) : gap < 0 ? (
+                            <span className="rank-change up">
+                              <ArrowUp size={12} />
+                              {Math.abs(gap)} ahead
+                            </span>
+                          ) : (
+                            <span className="rank-change neutral">tied</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="popularity-cell">
+                            <div className="popularity-bar-container">
+                              <div
+                                className="popularity-bar"
+                                style={{
+                                  width: `${kw.popularity}%`,
+                                  background:
+                                    kw.popularity >= 70
+                                      ? 'var(--color-success)'
+                                      : kw.popularity >= 40
+                                        ? 'var(--accent-primary)'
+                                        : 'var(--color-warning)',
+                                }}
+                              />
+                            </div>
+                            <span className="popularity-value">
+                              {kw.popularity}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {appKeywords.length === 0 && (
+                    <tr>
+                      <td colSpan={competitors.length + 5}>
+                        Add or find keywords for {primaryApp?.name ?? 'your app'} before comparing competitors.
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>

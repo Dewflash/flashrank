@@ -1517,6 +1517,16 @@ textarea {
   font-weight: 600;
 }
 
+.competitor-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 72px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
 /* ========================================
    OVERVIEW CARDS
    ======================================== */
@@ -1829,6 +1839,44 @@ textarea {
 @media (max-width: 720px) {
   body {
     overflow: auto;
+  }
+
+  .sidebar,
+  .sidebar:not(.collapsed) {
+    width: var(--sidebar-collapsed-width);
+    min-width: var(--sidebar-collapsed-width);
+    position: relative;
+    box-shadow: none;
+  }
+
+  .sidebar:not(.collapsed) + .main-content {
+    margin-left: 0;
+  }
+
+  .sidebar:not(.collapsed) .sidebar-title,
+  .sidebar:not(.collapsed) .sidebar-subtitle,
+  .sidebar:not(.collapsed) .nav-label,
+  .sidebar:not(.collapsed) .nav-section-title,
+  .sidebar:not(.collapsed) .app-selector-info,
+  .sidebar:not(.collapsed) .sync-text {
+    display: none;
+  }
+
+  .sidebar.mobile-open {
+    width: min(var(--sidebar-width), calc(100vw - 32px));
+    min-width: min(var(--sidebar-width), calc(100vw - 32px));
+    position: fixed;
+    inset: 0 auto 0 0;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .sidebar.mobile-open .sidebar-title,
+  .sidebar.mobile-open .sidebar-subtitle,
+  .sidebar.mobile-open .nav-label,
+  .sidebar.mobile-open .nav-section-title,
+  .sidebar.mobile-open .app-selector-info,
+  .sidebar.mobile-open .sync-text {
+    display: revert;
   }
 
   .app-shell {

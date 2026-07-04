@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Trash2, Tag, Copy, ExternalLink, StickyNote } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { Trash2, Copy, ExternalLink, StickyNote } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 
 interface ContextMenuProps {

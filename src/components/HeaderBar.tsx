@@ -27,7 +27,7 @@ export default function HeaderBar() {
   ).length;
 
   const handleExport = () => {
-    const appKeywords = keywords.filter((k) => k.appId === selectedAppId);
+    const appKeywords = keywords.filter((k) => k.appId === selectedAppId && k.region === selectedRegion);
     const csvHeader = 'Keyword,Popularity,Difficulty,Rank,Change,Tags\n';
     const csvRows = appKeywords
       .map(
