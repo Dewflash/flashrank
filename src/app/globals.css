@@ -1359,6 +1359,104 @@ textarea {
   color: var(--text-tertiary);
 }
 
+.add-keyword-suggestions {
+  margin-top: var(--space-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.suggestion-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.suggestion-section-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.add-keyword-suggestion-list {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.add-keyword-suggestion-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 90px 20px;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.add-keyword-suggestion-row:last-child {
+  border-bottom: 0;
+}
+
+.add-keyword-suggestion-row:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+}
+
+.add-keyword-suggestion-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.suggestion-popularity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.suggestion-keyword {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.suggestion-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.suggestion-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-success);
+}
+
 /* ========================================
    KEYWORD RESEARCH
    ======================================== */

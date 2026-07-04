@@ -13,6 +13,8 @@ interface ITunesSearchResult {
   averageUserRating: number;
   userRatingCount: number;
   primaryGenreName: string;
+  description?: string;
+  genres?: string[];
   bundleId: string;
   trackViewUrl: string;
 }
@@ -43,6 +45,8 @@ function mapToAppMetadata(item: ITunesSearchResult): AppMetadata {
     rating: item.averageUserRating ?? 0,
     ratingCount: item.userRatingCount ?? 0,
     category: item.primaryGenreName,
+    description: item.description,
+    genres: item.genres,
     platform: 'ios',
     bundleId: item.bundleId,
     url: item.trackViewUrl,

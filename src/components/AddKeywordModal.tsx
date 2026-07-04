@@ -10,6 +10,7 @@ import {
   calculateDifficulty,
   calculateDifficultyScore,
 } from '@/lib/api';
+import { ALL_TIME_POPULAR_KEYWORDS } from '@/lib/keywordSeeds';
 import {
   fetchRankingSignals,
   PUBLIC_RANKING_RESULT_LIMIT,
@@ -34,6 +35,21 @@ export default function AddKeywordModal() {
   const [isLoading, setIsLoading] = useState(false);
   const [progressText, setProgressText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const popularSuggestions = React.useMemo(
+    () =>
+      ALL_TIME_POPULAR_KEYWORDS
+        .filter((keyword) =>
+          keywordInput.trim()
+            ? keyword.includes(keywordInput.trim().toLowerCase())
+            : true
+        )
+        .slice(0, 12)
+        .map((keyword) => ({
+          keyword,
+          popularity: calculatePopularity(keyword),
+        })),
+    [keywordInput]
+  );
 
   const keywordTerms = React.useMemo(
     () =>
@@ -218,36 +234,39 @@ export default function AddKeywordModal() {
           {error && <div className="credential-note">{error}</div>}
           {progressText && <div className="credential-note">{progressText}</div>}
 
-          {/* Suggestions */}
-          {suggestions.length > 0 && keywordTerms.length <= 1 && (
-            <div style={{ marginTop: '8px' }}>
-              <div
-                style={{
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  color: 'var(--text-tertiary)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  marginBottom: '6px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <Sparkles size={12} />
-                Suggestions
+          {keywordTerms.length <= 1 && (
+            <div className="add-keyword-suggestions">
+              <div className="suggestion-section-head">
+                <span>
+                  <Sparkles size={12} />
+                  {suggestions.length > 0 ? 'Search Suggestions' : 'Most Searched Overall'}
+                </span>
+                {suggestions.length === 0 && <span>Public starter terms</span>}
               </div>
-              {suggestions.map((suggestion) => (
-                <div
-                  key={suggestion}
-                  className="search-result-item"
-                  onClick={() => void handleAddKeywords([suggestion])}
-                  style={{ padding: '8px 10px' }}
-                >
-                  <Plus size={14} style={{ color: 'var(--accent-primary)' }} />
-                  <span style={{ fontSize: '13px' }}>{suggestion}</span>
-                </div>
-              ))}
+              <div className="add-keyword-suggestion-list">
+                {(suggestions.length > 0
+                  ? suggestions.map((suggestion) => ({
+                      keyword: suggestion,
+                      popularity: calculatePopularity(suggestion),
+                    }))
+                  : popularSuggestions
+                ).map((suggestion) => (
+                  <button
+                    key={suggestion.keyword}
+                    type="button"
+                    className="add-keyword-suggestion-row"
+                    onClick={() => void handleAddKeywords([suggestion.keyword])}
+                    disabled={isLoading}
+                  >
+                    <span className="suggestion-popularity">{suggestion.popularity}</span>
+                    <span className="suggestion-keyword">{suggestion.keyword}</span>
+                    <span className="suggestion-bar">
+                      <span style={{ width: `${suggestion.popularity}%` }} />
+                    </span>
+                    <Plus size={14} />
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

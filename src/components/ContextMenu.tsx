@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { Trash2, Copy, ExternalLink, StickyNote } from 'lucide-react';
+import { Trash2, Copy, ExternalLink, StickyNote, Users } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import type { RankingAppSnapshot, TrackedApp } from '@/types';
 
 interface ContextMenuProps {
   x: number;
@@ -13,7 +14,17 @@ interface ContextMenuProps {
 
 export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const { keywords, removeKeyword, tags, updateKeywordTags, setSelectedKeyword, setDetailPanelOpen } = useAppStore();
+  const {
+    apps,
+    keywords,
+    removeKeyword,
+    tags,
+    updateKeywordTags,
+    setSelectedKeyword,
+    setDetailPanelOpen,
+    addApp,
+    setViewMode,
+  } = useAppStore();
   const keyword = keywords.find((k) => k.id === keywordId);
 
   useEffect(() => {
@@ -28,6 +39,22 @@ export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuPro
   }, [onClose]);
 
   if (!keyword) return null;
+  const keywordRegion = keyword.region;
+  const extractableRankingApps = (keyword.rankingApps ?? []).filter(
+    (app) =>
+      app.appId !== keyword.appId &&
+      !apps.some(
+        (trackedApp) =>
+          trackedApp.id === app.appId &&
+          trackedApp.region === keywordRegion &&
+          trackedApp.isCompetitor
+      )
+  );
+  const extractLimit = Math.min(extractableRankingApps.length, 10);
+  const extractLabel =
+    extractLimit > 0
+      ? `Extract ${extractLimit} Competitor${extractLimit === 1 ? '' : 's'}`
+      : 'Extract Competitors';
 
   // Adjust position to stay within viewport
   const adjustedX = Math.min(x, window.innerWidth - 200);
@@ -65,8 +92,31 @@ export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuPro
   };
 
   const handleSearchAppStore = () => {
-    const url = `https://apps.apple.com/us/search?term=${encodeURIComponent(keyword.keyword)}`;
+    const url = `https://apps.apple.com/${keywordRegion.toLowerCase()}/search?term=${encodeURIComponent(keyword.keyword)}`;
     window.open(url, '_blank');
+    onClose();
+  };
+
+  const toCompetitorApp = (snapshot: RankingAppSnapshot): TrackedApp => ({
+    id: snapshot.appId,
+    name: snapshot.appName,
+    developer: snapshot.developer,
+    icon: snapshot.appIcon,
+    price: 'Unknown',
+    rating: snapshot.rating,
+    ratingCount: snapshot.ratingCount,
+    category: 'Observed competitor',
+    platform: 'ios',
+    bundleId: snapshot.bundleId,
+    url: snapshot.url,
+    isCompetitor: true,
+    addedAt: new Date().toISOString(),
+    region: keywordRegion,
+  });
+
+  const handleExtractCompetitors = () => {
+    extractableRankingApps.slice(0, 10).forEach((app) => addApp(toCompetitorApp(app)));
+    setViewMode('competitors');
     onClose();
   };
 
@@ -105,6 +155,12 @@ export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuPro
       </div>
 
       <MenuItem icon={<StickyNote size={14} />} label="View Details" onClick={handleViewDetails} />
+      <MenuItem
+        icon={<Users size={14} />}
+        label={extractLabel}
+        onClick={handleExtractCompetitors}
+        disabled={extractableRankingApps.length === 0}
+      />
       <MenuItem icon={<Copy size={14} />} label="Copy Keyword" onClick={handleCopyKeyword} />
       <MenuItem icon={<ExternalLink size={14} />} label="Search App Store" onClick={handleSearchAppStore} />
 
@@ -148,10 +204,10 @@ export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuPro
               transition: 'background 100ms',
             }}
             onMouseEnter={(e) =>
-              ((e.target as HTMLElement).style.background = 'var(--bg-surface-hover)')
+              ((e.currentTarget as HTMLElement).style.background = 'var(--bg-surface-hover)')
             }
             onMouseLeave={(e) =>
-              ((e.target as HTMLElement).style.background = 'transparent')
+              ((e.currentTarget as HTMLElement).style.background = 'transparent')
             }
           >
             <span
@@ -189,33 +245,44 @@ function MenuItem({
   label,
   onClick,
   danger = false,
+  disabled = false,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <div
-      onClick={onClick}
+      onClick={() => {
+        if (!disabled) onClick();
+      }}
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: '8px',
         padding: '6px 10px',
         fontSize: '13px',
-        color: danger ? 'var(--color-danger)' : 'var(--text-secondary)',
-        cursor: 'pointer',
+        color: disabled
+          ? 'var(--text-tertiary)'
+          : danger
+            ? 'var(--color-danger)'
+            : 'var(--text-secondary)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.55 : 1,
         borderRadius: '4px',
         transition: 'background 100ms',
       }}
       onMouseEnter={(e) =>
-        ((e.target as HTMLElement).style.background = danger
-          ? 'var(--color-danger-bg)'
-          : 'var(--bg-surface-hover)')
+        ((e.currentTarget as HTMLElement).style.background = disabled
+          ? 'transparent'
+          : danger
+            ? 'var(--color-danger-bg)'
+            : 'var(--bg-surface-hover)')
       }
       onMouseLeave={(e) =>
-        ((e.target as HTMLElement).style.background = 'transparent')
+        ((e.currentTarget as HTMLElement).style.background = 'transparent')
       }
     >
       {icon}

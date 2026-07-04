@@ -13,7 +13,7 @@ import {
   ViewMode,
 } from '@/types';
 import { legacyDemoAppIds, seedTags } from '@/data/seedData';
-import { isBlockedKeyword } from '@/lib/keywordHydration';
+import { isBlockedKeyword, slugifyKeyword } from '@/lib/keywordHydration';
 
 // ─── Action types ───────────────────────────────────────────────────────────
 
@@ -28,6 +28,7 @@ interface AppActions {
   addKeyword: (keyword: TrackedKeyword) => void;
   upsertKeywords: (keywords: TrackedKeyword[]) => void;
   removeKeyword: (keywordId: string) => void;
+  removeKeywordsForAppRegion: (appId: string, region: string) => void;
   setSelectedKeyword: (keywordId: string | null) => void;
   updateKeywordTags: (keywordId: string, tags: KeywordTag[]) => void;
   updateKeywordNote: (keywordId: string, note: string) => void;
@@ -163,18 +164,67 @@ export const useAppStore = create<AppState & AppActions>()(
     })),
 
   setSelectedRegion: (region) =>
-    set((state) => ({
-      selectedRegion: region,
-      selectedKeywordId: null,
-      isDetailPanelOpen: false,
-      filter: {
-        ...state.filter,
-        search: '',
-        tags: [],
-        difficulty: [],
-        rankRange: [null, null],
-      },
-    })),
+    set((state) => {
+      const selectedAppId = state.selectedAppId;
+      if (!selectedAppId || state.selectedRegion === region) {
+        return {
+          selectedRegion: region,
+          filter: {
+            ...state.filter,
+            search: '',
+            tags: [],
+            difficulty: [],
+            rankRange: [null, null],
+          },
+        };
+      }
+
+      const existingTargetTerms = new Set(
+        state.keywords
+          .filter((keyword) => keyword.appId === selectedAppId && keyword.region === region)
+          .map((keyword) => keyword.keyword.toLowerCase())
+      );
+      const keywordsToCarry = state.keywords.filter(
+        (keyword) =>
+          keyword.appId === selectedAppId &&
+          keyword.region === state.selectedRegion &&
+          !existingTargetTerms.has(keyword.keyword.toLowerCase())
+      );
+      const now = new Date().toISOString();
+      const carriedKeywords = keywordsToCarry.map((keyword) => ({
+        ...keyword,
+        id: `kw-${region}-${selectedAppId}-${slugifyKeyword(keyword.keyword)}`,
+        region,
+        currentRank: null,
+        previousRank: null,
+        rankChange: null,
+        rankHistory: [],
+        competitorRanks: {},
+        rankingApps: [],
+        rankingResultCount: 0,
+        lastUpdated: now,
+        addedAt: now,
+      }));
+      const selectedKeyword = state.keywords.find((keyword) => keyword.id === state.selectedKeywordId);
+      const carriedSelectedKeyword =
+        selectedKeyword?.appId === selectedAppId && selectedKeyword.region === state.selectedRegion
+          ? carriedKeywords.find((keyword) => keyword.keyword.toLowerCase() === selectedKeyword.keyword.toLowerCase())
+          : null;
+
+      return {
+        selectedRegion: region,
+        keywords: [...state.keywords, ...carriedKeywords],
+        selectedKeywordId: carriedSelectedKeyword?.id ?? null,
+        isDetailPanelOpen: carriedSelectedKeyword ? state.isDetailPanelOpen : false,
+        filter: {
+          ...state.filter,
+          search: '',
+          tags: [],
+          difficulty: [],
+          rankRange: [null, null],
+        },
+      };
+    }),
 
   addApp: (app) =>
     set((state) => {
@@ -229,6 +279,31 @@ export const useAppStore = create<AppState & AppActions>()(
       keywords: state.keywords.filter((k) => k.id !== keywordId),
       selectedKeywordId:
         state.selectedKeywordId === keywordId ? null : state.selectedKeywordId,
+    })),
+
+  removeKeywordsForAppRegion: (appId, region) =>
+    set((state) => ({
+      keywords: state.keywords.filter((keyword) => keyword.appId !== appId || keyword.region !== region),
+      selectedKeywordId:
+        state.selectedKeywordId &&
+        state.keywords.some(
+          (keyword) =>
+            keyword.id === state.selectedKeywordId &&
+            keyword.appId === appId &&
+            keyword.region === region
+        )
+          ? null
+          : state.selectedKeywordId,
+      isDetailPanelOpen:
+        state.selectedKeywordId &&
+        state.keywords.some(
+          (keyword) =>
+            keyword.id === state.selectedKeywordId &&
+            keyword.appId === appId &&
+            keyword.region === region
+        )
+          ? false
+          : state.isDetailPanelOpen,
     })),
 
   setSelectedKeyword: (keywordId) =>

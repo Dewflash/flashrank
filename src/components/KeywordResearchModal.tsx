@@ -15,8 +15,10 @@ import {
   calculateDifficultyScore,
   calculatePopularity,
   getKeywordSuggestions,
+  lookupApp,
   searchApps,
 } from '@/lib/api';
+import { buildContextualKeywordSeeds } from '@/lib/keywordSeeds';
 
 interface SuggestionRow {
   keyword: string;
@@ -30,42 +32,11 @@ interface SuggestionRow {
   rankingSignals: RankingSignals;
 }
 
-const MAX_ROWS = 60;
+const MAX_ROWS = 80;
+const MAX_EXPANSION_ROUNDS = 2;
+const MAX_EXPANSION_FRONTIER = 14;
 type SuggestionSortField = 'opportunity' | 'popularity' | 'difficulty' | 'position' | 'apps';
 type SuggestionFilter = 'all' | 'low' | 'medium' | 'high';
-
-const ALL_TIME_POPULAR_KEYWORDS = [
-  'chatgpt',
-  'vpn',
-  'google',
-  'gmail',
-  'youtube',
-  'instagram',
-  'tiktok',
-  'whatsapp',
-  'facebook',
-  'telegram',
-  'netflix',
-  'spotify',
-  'amazon',
-  'maps',
-  'weather',
-  'photo editor',
-  'video editor',
-  'calendar',
-  'planner',
-  'habit tracker',
-  'fitness',
-  'ai',
-  'browser',
-  'translate',
-  'games',
-  'puzzle',
-  'farm',
-  'music',
-  'notes',
-  'budget',
-];
 
 function uniqueKeywords(values: string[]): string[] {
   const seen = new Set<string>();
@@ -82,6 +53,16 @@ function splitSeedInput(value: string): string[] {
   return uniqueKeywords(value.split(/[,\n]/g));
 }
 
+function appTermSeeds(app: AppMetadata): string[] {
+  return uniqueKeywords([
+    app.name,
+    app.developer,
+    app.category,
+    ...(app.genres ?? []),
+    ...buildContextualKeywordSeeds(app),
+  ]).slice(0, 16);
+}
+
 function scoreOpportunity(
   popularity: number,
   difficultyScore: number,
@@ -91,20 +72,6 @@ function scoreOpportunity(
   const rankBonus = position === null ? 16 : Math.max(0, 16 - position);
   const competitorBonus = hasCompetitor ? 8 : 0;
   return Math.round(popularity * 0.7 + (100 - difficultyScore) * 0.3 + rankBonus + competitorBonus);
-}
-
-function seedTerms(appName: string, category: string): string[] {
-  const normalizedName = appName.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ');
-  const words = normalizedName.split(/\s+/).filter((word) => word.length > 2);
-
-  return uniqueKeywords([
-    normalizedName,
-    ...words,
-    `${normalizedName} app`,
-    `${normalizedName} tracker`,
-    `${normalizedName} alternative`,
-    category.toLowerCase(),
-  ]).slice(0, 5);
 }
 
 export default function KeywordResearchModal() {
@@ -164,29 +131,58 @@ export default function KeywordResearchModal() {
   };
 
   const buildRows = useCallback(
-    async (terms: string[]) => {
+    async (terms: string[], sourceApp: AppMetadata = selectedApp as AppMetadata) => {
       if (!selectedApp) return;
       setIsLoading(true);
       setError(null);
 
       try {
-        const hinted = await Promise.all(
-          terms.map(async (term) => {
-            try {
-              return await getKeywordSuggestions(term);
-            } catch {
-              return [];
-            }
-          })
-        );
+        const competitorTerms = competitors.flatMap(appTermSeeds);
+        const explored = new Set<string>();
+        const expandedTerms: string[] = [];
+        let frontier = uniqueKeywords([
+          ...terms,
+          ...buildContextualKeywordSeeds(sourceApp),
+          ...competitorTerms,
+        ]).slice(0, MAX_EXPANSION_FRONTIER);
+
+        for (let round = 0; round < MAX_EXPANSION_ROUNDS; round += 1) {
+          const seeds = frontier.filter((term) => !explored.has(term));
+          if (seeds.length === 0) break;
+          seeds.forEach((term) => explored.add(term));
+          expandedTerms.push(...seeds);
+          setError(null);
+
+          const hinted = await Promise.all(
+            seeds.map(async (term) => {
+              try {
+                return await getKeywordSuggestions(term);
+              } catch {
+                return [];
+              }
+            })
+          );
+          const rankingDerived = await Promise.all(
+            seeds.slice(0, 6).map(async (term) => {
+              try {
+                const appsForTerm = await searchApps(term, selectedRegion, 8);
+                return appsForTerm.flatMap(appTermSeeds);
+              } catch {
+                return [];
+              }
+            })
+          );
+
+          frontier = uniqueKeywords([
+            ...hinted.flat(),
+            ...rankingDerived.flat(),
+          ])
+            .filter((term) => !explored.has(term))
+            .slice(0, MAX_EXPANSION_FRONTIER);
+        }
 
         const candidates = uniqueKeywords([
-          ...ALL_TIME_POPULAR_KEYWORDS,
-          ...terms,
-          ...hinted.flat(),
-          `${selectedApp.name} game`,
-          `${selectedApp.name} free`,
-          `best ${selectedApp.category.toLowerCase()} apps`,
+          ...expandedTerms,
         ])
           .filter((keyword) => !existingKeywords.has(keyword))
           .slice(0, MAX_ROWS);
@@ -237,11 +233,15 @@ export default function KeywordResearchModal() {
   useEffect(() => {
     if (!isKeywordResearchModalOpen || !selectedApp) return;
     const timer = window.setTimeout(() => {
-      void buildRows(seedTerms(selectedApp.name, selectedApp.category));
+      void (async () => {
+        const enrichedApp = await lookupApp(selectedApp.id, selectedRegion).catch(() => null);
+        const sourceApp = enrichedApp ?? selectedApp;
+        await buildRows(buildContextualKeywordSeeds(sourceApp), sourceApp);
+      })();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [buildRows, isKeywordResearchModalOpen, selectedApp]);
+  }, [buildRows, isKeywordResearchModalOpen, selectedApp, selectedRegion]);
 
   const filteredRows = rows.filter((row) => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -444,7 +444,7 @@ export default function KeywordResearchModal() {
               </select>
             </label>
             <span className="selection-muted">
-              Showing {sortedRows.length} of {rows.length}; includes public popular seed terms and Apple search hints.
+              Showing {sortedRows.length} of {rows.length}; built from app/category seeds and Apple search hints.
             </span>
           </div>
 

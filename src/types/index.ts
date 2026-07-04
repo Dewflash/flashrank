@@ -9,6 +9,8 @@ export interface AppMetadata {
   rating: number;
   ratingCount: number;
   category: string;
+  description?: string;
+  genres?: string[];
   platform: 'ios' | 'macos' | 'ipados' | 'tvos' | 'watchos';
   bundleId: string;
   url: string;

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Plus, Download, RefreshCw, Lightbulb } from 'lucide-react';
+import { Search, Plus, Download, RefreshCw, Lightbulb, Trash2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import RegionSelector from '@/components/RegionSelector';
 import { runBackgroundSync } from '@/lib/syncEngine';
@@ -17,6 +17,7 @@ export default function HeaderBar() {
     setSelectedRegion,
     setAddKeywordModalOpen,
     setKeywordResearchModalOpen,
+    removeKeywordsForAppRegion,
     isRefreshing,
     syncProgress,
   } = useAppStore();
@@ -57,6 +58,15 @@ export default function HeaderBar() {
       setRefreshError('Refresh failed');
       window.setTimeout(() => setRefreshError(null), 3000);
     }
+  };
+
+  const handleClearKeywords = () => {
+    if (!selectedAppId || keywordCount === 0) return;
+    const confirmed = window.confirm(
+      `Clear ${keywordCount} keyword${keywordCount === 1 ? '' : 's'} for this app in ${selectedRegion.toUpperCase()}?`
+    );
+    if (!confirmed) return;
+    removeKeywordsForAppRegion(selectedAppId, selectedRegion);
   };
 
   const titleMap = {
@@ -135,6 +145,20 @@ export default function HeaderBar() {
               disabled={!selectedAppId}
             >
               <Download size={16} />
+            </button>
+            <button
+              className="btn btn-secondary btn-icon tooltip"
+              onClick={handleClearKeywords}
+              data-tooltip={
+                keywordCount > 0
+                  ? 'Clear keywords for this app and region'
+                  : selectedAppId
+                    ? 'No keywords to clear'
+                    : 'Add an app first'
+              }
+              disabled={!selectedAppId || keywordCount === 0}
+            >
+              <Trash2 size={16} />
             </button>
             <button
               className="btn btn-warning"
