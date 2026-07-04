@@ -6,6 +6,7 @@ import { useAppStore } from '@/store/useAppStore';
 import RegionSelector from '@/components/RegionSelector';
 import { runBackgroundSync } from '@/lib/syncEngine';
 import type { RankStatusFilter } from '@/types';
+import { getKeywordScopeAppId, KEYWORD_RESEARCH_APP_ID } from '@/lib/keywordScope';
 
 export default function HeaderBar() {
   const {
@@ -25,12 +26,14 @@ export default function HeaderBar() {
   } = useAppStore();
 
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const keywordScopeAppId = getKeywordScopeAppId(selectedAppId);
+  const isKeywordResearchScope = keywordScopeAppId === KEYWORD_RESEARCH_APP_ID;
   const keywordCount = keywords.filter(
-    (k) => k.appId === selectedAppId && k.region === selectedRegion
+    (k) => k.appId === keywordScopeAppId && k.region === selectedRegion
   ).length;
 
   const handleExport = () => {
-    const appKeywords = keywords.filter((k) => k.appId === selectedAppId && k.region === selectedRegion);
+    const appKeywords = keywords.filter((k) => k.appId === keywordScopeAppId && k.region === selectedRegion);
     const csvHeader = 'Keyword,Popularity,Difficulty,Rank,Rank Status,Rank Status Message,Change,Tags\n';
     const csvCell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
     const csvRows = appKeywords
@@ -63,7 +66,7 @@ export default function HeaderBar() {
     try {
       await runBackgroundSync({
         force: true,
-        appId: selectedAppId,
+        appId: keywordScopeAppId,
         region: selectedRegion,
       });
     } catch {
@@ -73,12 +76,12 @@ export default function HeaderBar() {
   };
 
   const handleClearKeywords = () => {
-    if (!selectedAppId || keywordCount === 0) return;
+    if (keywordCount === 0) return;
     const confirmed = window.confirm(
-      `Clear ${keywordCount} keyword${keywordCount === 1 ? '' : 's'} for this app in ${selectedRegion.toUpperCase()}?`
+      `Clear ${keywordCount} keyword${keywordCount === 1 ? '' : 's'} for ${isKeywordResearchScope ? 'keyword research' : 'this app'} in ${selectedRegion.toUpperCase()}?`
     );
     if (!confirmed) return;
-    removeKeywordsForAppRegion(selectedAppId, selectedRegion);
+    removeKeywordsForAppRegion(keywordScopeAppId, selectedRegion);
   };
 
   const titleMap = {
@@ -123,17 +126,18 @@ export default function HeaderBar() {
               <option value="unranked">Unranked</option>
               <option value="pending">Pending</option>
               <option value="error">Errors</option>
+              <option value="no-app">No app</option>
             </select>
             <RegionSelector value={selectedRegion} onChange={setSelectedRegion} />
             <button
               className="btn btn-secondary btn-icon tooltip"
               onClick={handleRefresh}
               data-tooltip={
-                !selectedAppId
-                  ? 'Add an app first'
+                keywordCount === 0
+                  ? 'Add keywords first'
                   : refreshError || syncProgress.message || 'Refresh rankings'
               }
-              disabled={isRefreshing || !selectedAppId}
+              disabled={isRefreshing || keywordCount === 0}
             >
               <RefreshCw
                 size={16}
@@ -166,8 +170,8 @@ export default function HeaderBar() {
             <button
               className="btn btn-secondary btn-icon tooltip"
               onClick={handleExport}
-              data-tooltip={selectedAppId ? 'Export CSV' : 'Add an app first'}
-              disabled={!selectedAppId}
+              data-tooltip={keywordCount > 0 ? 'Export CSV' : 'Add keywords first'}
+              disabled={keywordCount === 0}
             >
               <Download size={16} />
             </button>
@@ -176,18 +180,19 @@ export default function HeaderBar() {
               onClick={handleClearKeywords}
               data-tooltip={
                 keywordCount > 0
-                  ? 'Clear keywords for this app and region'
+                  ? `Clear keywords for ${isKeywordResearchScope ? 'keyword research' : 'this app'} and region`
                   : selectedAppId
                     ? 'No keywords to clear'
-                    : 'Add an app first'
+                    : 'No keywords to clear'
               }
-              disabled={!selectedAppId || keywordCount === 0}
+              disabled={keywordCount === 0}
             >
               <Trash2 size={16} />
             </button>
             <button
               className="btn btn-warning"
               onClick={() => setKeywordResearchModalOpen(true)}
+              title={selectedAppId ? 'Find suggestions from this app metadata' : 'Choose an app to find app-based suggestions'}
               disabled={!selectedAppId}
             >
               <Lightbulb size={16} />
@@ -196,7 +201,6 @@ export default function HeaderBar() {
             <button
               className="btn btn-primary"
               onClick={() => setAddKeywordModalOpen(true)}
-              disabled={!selectedAppId}
             >
               <Plus size={16} />
               Add Keywords

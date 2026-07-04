@@ -957,6 +957,11 @@ textarea {
   color: var(--color-danger);
 }
 
+.rank-status-pill.no-app {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+
 .rank-value.rank-1 {
   background: linear-gradient(135deg, #ffd700, #ffb300);
   -webkit-background-clip: text;

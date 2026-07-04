@@ -1,6 +1,7 @@
 import { useAppStore } from '@/store/useAppStore';
 import { describeRankStatus, hydrateKeywordRanking } from '@/lib/keywordHydration';
 import { isProviderReady } from '@/lib/credentials';
+import { isKeywordResearchScope } from '@/lib/keywordScope';
 
 /**
  * Checks if 24 hours have passed since the last sync.
@@ -78,11 +79,13 @@ export async function runBackgroundSync(options: SyncOptions = {}) {
   try {
     const updatedKeywords = [...keywords];
     let failedCount = 0;
-    const competitors = apps.filter((app) => {
-      if (!app.isCompetitor) return false;
-      if (options.region && app.region !== options.region) return false;
-      return true;
-    });
+    const competitors = isKeywordResearchScope(options.appId)
+      ? []
+      : apps.filter((app) => {
+          if (!app.isCompetitor) return false;
+          if (options.region && app.region !== options.region) return false;
+          return true;
+        });
     const hasSearchAdsCredentials = isProviderReady(apiKeys, 'appleSearchAds');
 
     for (const [queueIndex, { keyword: kw, index }] of syncIndexes.entries()) {
@@ -130,7 +133,10 @@ export async function runBackgroundSync(options: SyncOptions = {}) {
           kw.appId,
           kw.region || 'us',
           competitors,
-          { appendHistory: true }
+          {
+            appendHistory: true,
+            hasSelectedApp: !isKeywordResearchScope(kw.appId),
+          }
         );
 
         // Sleep to avoid rate limiting from iTunes API
@@ -151,6 +157,7 @@ export async function runBackgroundSync(options: SyncOptions = {}) {
             currentRank: kw.currentRank,
             rankingResultCount: kw.rankingResultCount,
             sourceStatus: 'error',
+            hasSelectedApp: !isKeywordResearchScope(kw.appId),
           }),
         };
         setSyncProgress({

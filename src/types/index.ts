@@ -60,7 +60,7 @@ export type ASODataSource =
   | 'apple-search-ads'
   | 'app-store-connect';
 
-export type RankStatus = 'ranked' | 'unranked' | 'pending' | 'error';
+export type RankStatus = 'ranked' | 'unranked' | 'pending' | 'error' | 'no-app';
 export type RankStatusFilter = 'all' | RankStatus;
 
 export interface TrackedKeyword {

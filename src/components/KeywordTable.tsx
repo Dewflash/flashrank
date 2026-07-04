@@ -18,6 +18,7 @@ import type { RankingAppSnapshot, TrackedKeyword, SortField } from '@/types';
 import ContextMenu from '@/components/ContextMenu';
 import { runBackgroundSync } from '@/lib/syncEngine';
 import { describeRankStatus } from '@/lib/keywordHydration';
+import { getKeywordScopeAppId, isKeywordResearchScope, KEYWORD_RESEARCH_APP_ID } from '@/lib/keywordScope';
 
 type TranslationState =
   | { status: 'idle'; text: null }
@@ -96,6 +97,7 @@ function keywordRankStatus(keyword: TrackedKeyword) {
         describeRankStatus({
           currentRank: keyword.currentRank,
           rankingResultCount: keyword.rankingResultCount,
+          hasSelectedApp: !isKeywordResearchScope(keyword.appId),
         }).rankStatusMessage,
     };
   }
@@ -103,6 +105,7 @@ function keywordRankStatus(keyword: TrackedKeyword) {
   return describeRankStatus({
     currentRank: keyword.currentRank,
     rankingResultCount: keyword.rankingResultCount,
+    hasSelectedApp: !isKeywordResearchScope(keyword.appId),
   });
 }
 
@@ -131,7 +134,9 @@ export default function KeywordTable() {
   const [selectedBulkKeywordIds, setSelectedBulkKeywordIds] = useState<Set<string>>(new Set());
   const [now, setNow] = useState<number | null>(null);
   const [autoHydrateKey, setAutoHydrateKey] = useState<string | null>(null);
-  const currentImportProgress = appImportProgress[appScopeKey(selectedAppId, selectedRegion)];
+  const keywordScopeAppId = getKeywordScopeAppId(selectedAppId);
+  const isKeywordResearchScope = keywordScopeAppId === KEYWORD_RESEARCH_APP_ID;
+  const currentImportProgress = appImportProgress[appScopeKey(keywordScopeAppId, selectedRegion)];
   const isImportingApp = currentImportProgress?.status === 'loading';
 
   useEffect(() => {
@@ -151,7 +156,7 @@ export default function KeywordTable() {
 
   // Filter keywords
   const filtered = keywords.filter((k) => {
-    if (k.appId !== selectedAppId) return false;
+    if (k.appId !== keywordScopeAppId) return false;
     if (k.region !== selectedRegion) return false;
     if (filter.search) {
       const searchLower = filter.search.toLowerCase();
@@ -172,22 +177,22 @@ export default function KeywordTable() {
   const hasMissingRankingSnapshots = filtered.some((keyword) => !keyword.rankingApps?.length);
 
   useEffect(() => {
-    if (!selectedAppId || !hasMissingRankingSnapshots || isRefreshing) return;
+    if (!hasMissingRankingSnapshots || isRefreshing) return;
 
-    const hydrationKey = `${selectedRegion}:${selectedAppId}`;
+    const hydrationKey = `${selectedRegion}:${keywordScopeAppId}`;
     if (autoHydrateKey === hydrationKey) return;
 
     setAutoHydrateKey(hydrationKey);
     void runBackgroundSync({
       force: true,
-      appId: selectedAppId,
+      appId: keywordScopeAppId,
       region: selectedRegion,
     });
   }, [
     autoHydrateKey,
     hasMissingRankingSnapshots,
     isRefreshing,
-    selectedAppId,
+    keywordScopeAppId,
     selectedRegion,
   ]);
 
@@ -358,15 +363,15 @@ export default function KeywordTable() {
   };
 
   if (sorted.length === 0) {
-    const title = !selectedAppId
-      ? 'Add an app first'
+    const title = isKeywordResearchScope
+      ? 'Explore keyword stats'
       : isImportingApp
         ? 'Preparing keyword workspace'
         : currentImportProgress?.status === 'error'
           ? 'Keyword import needs attention'
           : 'No keywords found';
-    const text = !selectedAppId
-      ? 'Search the App Store to choose an app before tracking keywords.'
+    const text = isKeywordResearchScope
+      ? 'Add keywords to see estimated popularity, difficulty, and the top public App Store results without choosing an app.'
       : isImportingApp
         ? currentImportProgress.message ?? 'Checking public Apple suggestions and ranking results.'
         : currentImportProgress?.status === 'error'
@@ -396,15 +401,17 @@ export default function KeywordTable() {
         </div>
         <div className="empty-state-title">{title}</div>
         <div className="empty-state-text">{text}</div>
-        {selectedAppId && !filter.search && !isImportingApp && (
-          <button
-            className="btn btn-warning"
-            style={{ marginTop: 16 }}
-            onClick={() => setKeywordResearchModalOpen(true)}
-          >
-            <Lightbulb size={16} />
-            Find Suggestions
-          </button>
+        {!filter.search && !isImportingApp && (
+          isKeywordResearchScope ? null : (
+            <button
+              className="btn btn-warning"
+              style={{ marginTop: 16 }}
+              onClick={() => setKeywordResearchModalOpen(true)}
+            >
+              <Lightbulb size={16} />
+              Find Suggestions
+            </button>
+          )
         )}
       </div>
     );
@@ -600,7 +607,9 @@ export default function KeywordTable() {
                         ? 'Pending'
                         : status.rankStatus === 'error'
                           ? 'Error'
-                          : 'Top 200'}
+                          : status.rankStatus === 'no-app'
+                            ? 'No app'
+                            : 'Top 200'}
                     </span>
                   )}
                 </div>

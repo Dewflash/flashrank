@@ -16,6 +16,7 @@ import {
 } from '@/types';
 import { legacyDemoAppIds, seedTags } from '@/data/seedData';
 import { describeRankStatus, isBlockedKeyword, slugifyKeyword } from '@/lib/keywordHydration';
+import { getKeywordScopeAppId, isKeywordResearchScope } from '@/lib/keywordScope';
 
 // ─── Action types ───────────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ function sanitizeKeywords(keywords: TrackedKeyword[] | undefined): TrackedKeywor
       : describeRankStatus({
           currentRank: keyword.currentRank,
           rankingResultCount: keyword.rankingResultCount,
+          hasSelectedApp: !isKeywordResearchScope(keyword.appId),
         });
     const normalizedKeyword = {
       ...keyword,
@@ -204,7 +206,8 @@ export const useAppStore = create<AppState & AppActions>()(
   setSelectedRegion: (region) =>
     set((state) => {
       const selectedAppId = state.selectedAppId;
-      if (!selectedAppId || state.selectedRegion === region) {
+      const keywordScopeAppId = getKeywordScopeAppId(selectedAppId);
+      if (state.selectedRegion === region) {
         return {
           selectedRegion: region,
           filter: defaultFilter({
@@ -218,19 +221,19 @@ export const useAppStore = create<AppState & AppActions>()(
 
       const existingTargetTerms = new Set(
         state.keywords
-          .filter((keyword) => keyword.appId === selectedAppId && keyword.region === region)
+          .filter((keyword) => keyword.appId === keywordScopeAppId && keyword.region === region)
           .map((keyword) => keyword.keyword.toLowerCase())
       );
       const keywordsToCarry = state.keywords.filter(
         (keyword) =>
-          keyword.appId === selectedAppId &&
+          keyword.appId === keywordScopeAppId &&
           keyword.region === state.selectedRegion &&
           !existingTargetTerms.has(keyword.keyword.toLowerCase())
       );
       const now = new Date().toISOString();
       const carriedKeywords = keywordsToCarry.map((keyword) => ({
         ...keyword,
-        id: `kw-${region}-${selectedAppId}-${slugifyKeyword(keyword.keyword)}`,
+        id: `kw-${region}-${keywordScopeAppId}-${slugifyKeyword(keyword.keyword)}`,
         region,
         currentRank: null,
         previousRank: null,
@@ -239,14 +242,22 @@ export const useAppStore = create<AppState & AppActions>()(
         competitorRanks: {},
         rankingApps: [],
         rankingResultCount: 0,
-        rankStatus: 'pending' as const,
-        rankStatusMessage: `Pending refresh in ${region.toUpperCase()}. Run refresh to check public App Store rankings for this storefront.`,
+        ...(selectedAppId
+          ? {
+              rankStatus: 'pending' as const,
+              rankStatusMessage: `Pending refresh in ${region.toUpperCase()}. Run refresh to check public App Store rankings for this storefront.`,
+            }
+          : describeRankStatus({
+              currentRank: null,
+              rankingResultCount: 0,
+              hasSelectedApp: false,
+            })),
         lastUpdated: now,
         addedAt: now,
       }));
       const selectedKeyword = state.keywords.find((keyword) => keyword.id === state.selectedKeywordId);
       const carriedSelectedKeyword =
-        selectedKeyword?.appId === selectedAppId && selectedKeyword.region === state.selectedRegion
+        selectedKeyword?.appId === keywordScopeAppId && selectedKeyword.region === state.selectedRegion
           ? carriedKeywords.find((keyword) => keyword.keyword.toLowerCase() === selectedKeyword.keyword.toLowerCase())
           : null;
 
@@ -481,10 +492,11 @@ export const useAppStore = create<AppState & AppActions>()(
 
   getFilteredKeywords: () => {
     const { keywords, selectedAppId, filter } = get();
+    const keywordScopeAppId = getKeywordScopeAppId(selectedAppId);
 
     return keywords.filter((kw) => {
       // Must belong to the currently-selected app
-      if (selectedAppId && kw.appId !== selectedAppId) return false;
+      if (kw.appId !== keywordScopeAppId) return false;
 
       // Search text (case-insensitive, matches keyword string)
       if (kw.region !== get().selectedRegion) return false;
@@ -517,6 +529,7 @@ export const useAppStore = create<AppState & AppActions>()(
         const status = kw.rankStatus ?? describeRankStatus({
           currentRank: kw.currentRank,
           rankingResultCount: kw.rankingResultCount,
+          hasSelectedApp: !isKeywordResearchScope(kw.appId),
         }).rankStatus;
         if (status !== filter.rankStatus) return false;
       }

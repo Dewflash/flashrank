@@ -3,10 +3,12 @@
 import React from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Command } from 'lucide-react';
+import { getKeywordScopeAppId } from '@/lib/keywordScope';
 
 export default function StatusBar() {
   const { keywords, selectedAppId, selectedRegion, selectedKeywordId, isRefreshing, syncProgress } = useAppStore();
-  const appKeywords = keywords.filter((k) => k.appId === selectedAppId && k.region === selectedRegion);
+  const keywordScopeAppId = getKeywordScopeAppId(selectedAppId);
+  const appKeywords = keywords.filter((k) => k.appId === keywordScopeAppId && k.region === selectedRegion);
   const rankedCount = appKeywords.filter((k) => k.currentRank !== null).length;
 
   return (

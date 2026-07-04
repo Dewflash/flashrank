@@ -122,12 +122,21 @@ export function describeRankStatus({
   rankingResultCount,
   sourceStatus = 'ok',
   limit = PUBLIC_RANKING_RESULT_LIMIT,
+  hasSelectedApp = true,
 }: {
   currentRank: number | null;
   rankingResultCount?: number;
   sourceStatus?: RankingSignals['sourceStatus'];
   limit?: number;
+  hasSelectedApp?: boolean;
 }): { rankStatus: RankStatus; rankStatusMessage: string } {
+  if (!hasSelectedApp) {
+    return {
+      rankStatus: 'no-app',
+      rankStatusMessage: 'No app is selected, so FlashRank is showing keyword intelligence without a tracked app position.',
+    };
+  }
+
   if (sourceStatus === 'error') {
     return {
       rankStatus: 'error',
@@ -202,7 +211,7 @@ export async function hydrateKeywordRanking(
   selectedAppId: string,
   region: string,
   competitors: TrackedApp[],
-  options: { appendHistory?: boolean } = {}
+  options: { appendHistory?: boolean; hasSelectedApp?: boolean } = {}
 ): Promise<TrackedKeyword> {
   const signals = await fetchRankingSignals(
     keyword.keyword,
@@ -235,6 +244,7 @@ export async function hydrateKeywordRanking(
     currentRank: signals.currentRank,
     rankingResultCount: signals.rankingResultCount,
     sourceStatus: signals.sourceStatus,
+    hasSelectedApp: options.hasSelectedApp,
   });
 
   return {

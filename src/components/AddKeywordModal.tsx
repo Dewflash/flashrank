@@ -17,6 +17,7 @@ import {
   PUBLIC_RANKING_RESULT_LIMIT,
   slugifyKeyword,
 } from '@/lib/keywordHydration';
+import { getKeywordScopeAppId } from '@/lib/keywordScope';
 
 function cleanKeywordValue(value: string): string {
   return value
@@ -96,6 +97,8 @@ export default function AddKeywordModal() {
     () => parseKeywordInput(keywordInput),
     [keywordInput]
   );
+  const keywordScopeAppId = getKeywordScopeAppId(selectedAppId);
+  const hasSelectedApp = selectedAppId !== null;
 
   const fetchSuggestions = useCallback(
     async (term: string) => {
@@ -129,28 +132,28 @@ export default function AddKeywordModal() {
   }, [fetchSuggestions, keywordInput]);
 
   const handleAddKeyword = async (keyword: string): Promise<boolean> => {
-    if (!selectedAppId || !keyword.trim()) return false;
+    if (!keyword.trim()) return false;
 
     const normalizedKeyword = keyword.trim().toLowerCase();
     const alreadyTracked = keywords.some(
       (trackedKeyword) =>
-        trackedKeyword.appId === selectedAppId &&
+        trackedKeyword.appId === keywordScopeAppId &&
         trackedKeyword.region === selectedRegion &&
         trackedKeyword.keyword.toLowerCase() === normalizedKeyword
     );
 
     if (alreadyTracked) {
-      setError(`"${normalizedKeyword}" is already tracked for this app and region.`);
+      setError(`"${normalizedKeyword}" is already tracked for ${hasSelectedApp ? 'this app' : 'keyword research'} and region.`);
       return false;
     }
 
     try {
-      const competitors = apps.filter(
-        (app) => app.isCompetitor && app.region === selectedRegion
-      );
+      const competitors = hasSelectedApp
+        ? apps.filter((app) => app.isCompetitor && app.region === selectedRegion)
+        : [];
       const rankingSignals = await fetchRankingSignals(
         normalizedKeyword,
-        selectedAppId,
+        selectedAppId ?? '',
         selectedRegion,
         competitors,
         PUBLIC_RANKING_RESULT_LIMIT
@@ -168,12 +171,13 @@ export default function AddKeywordModal() {
         currentRank: rankingSignals.currentRank,
         rankingResultCount: rankingSignals.rankingResultCount,
         sourceStatus: rankingSignals.sourceStatus,
+        hasSelectedApp,
       });
 
       const newKeyword: TrackedKeyword = {
-        id: `kw-${selectedRegion}-${selectedAppId}-${slugifyKeyword(normalizedKeyword)}`,
+        id: `kw-${selectedRegion}-${keywordScopeAppId}-${slugifyKeyword(normalizedKeyword)}`,
         keyword: normalizedKeyword,
-        appId: selectedAppId,
+        appId: keywordScopeAppId,
         region: selectedRegion,
         popularity,
         difficulty,
@@ -209,7 +213,7 @@ export default function AddKeywordModal() {
   };
 
   const handleAddKeywords = async (terms: string[]) => {
-    if (!selectedAppId || terms.length === 0 || isLoading) return;
+    if (terms.length === 0 || isLoading) return;
 
     setIsLoading(true);
     setError(null);

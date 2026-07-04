@@ -20,6 +20,7 @@ import {
   describeRankStatus,
   PUBLIC_RANKING_RESULT_LIMIT,
 } from '@/lib/keywordHydration';
+import { isKeywordResearchScope } from '@/lib/keywordScope';
 import type { RankingAppSnapshot } from '@/types';
 
 export default function DetailPanel() {
@@ -123,11 +124,13 @@ export default function DetailPanel() {
           describeRankStatus({
             currentRank: keyword.currentRank,
             rankingResultCount: keyword.rankingResultCount,
+            hasSelectedApp: !isKeywordResearchScope(keyword.appId),
           }).rankStatusMessage,
       }
     : describeRankStatus({
         currentRank: keyword.currentRank,
         rankingResultCount: keyword.rankingResultCount,
+        hasSelectedApp: !isKeywordResearchScope(keyword.appId),
       });
 
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -216,7 +219,9 @@ export default function DetailPanel() {
                   ? 'Pending'
                   : rankStatus.rankStatus === 'error'
                     ? 'Error'
-                    : 'Top 200+'}
+                    : rankStatus.rankStatus === 'no-app'
+                      ? 'No app'
+                      : 'Top 200+'}
             </div>
           </div>
           <div className="stat-card">

@@ -3,6 +3,7 @@
 import { useEffect, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { runBackgroundSync } from '@/lib/syncEngine';
+import { getKeywordScopeAppId } from '@/lib/keywordScope';
 
 /**
  * Global keyboard shortcut handler for FlashRank's macOS-style shortcuts.
@@ -81,9 +82,10 @@ export default function KeyboardShortcuts() {
       // ⌘+R — Refresh data
       if (isMeta && e.key === 'r') {
         e.preventDefault();
+        const keywordScopeAppId = getKeywordScopeAppId(selectedAppId);
         void runBackgroundSync({
           force: true,
-          appId: selectedAppId,
+          appId: keywordScopeAppId,
           region: selectedRegion,
         });
         return;
@@ -111,7 +113,10 @@ export default function KeyboardShortcuts() {
       }
 
       // Arrow Up/Down — Navigate keywords
-      const appKeywords = keywords.filter((k) => k.appId === selectedAppId);
+      const keywordScopeAppId = getKeywordScopeAppId(selectedAppId);
+      const appKeywords = keywords.filter(
+        (k) => k.appId === keywordScopeAppId && k.region === selectedRegion
+      );
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         if (appKeywords.length === 0) return;
