@@ -74,6 +74,7 @@ export interface TrackedKeyword {
   rankHistory: RankHistoryEntry[];
   competitorRanks?: Record<string, number | null>;
   rankingApps?: RankingAppSnapshot[];
+  rankingResultCount?: number;
   popularitySource?: ASODataSource;
   difficultySource?: ASODataSource;
   rankSource?: ASODataSource;

@@ -10,7 +10,11 @@ import {
   calculateDifficulty,
   calculateDifficultyScore,
 } from '@/lib/api';
-import { fetchRankingSignals, slugifyKeyword } from '@/lib/keywordHydration';
+import {
+  fetchRankingSignals,
+  PUBLIC_RANKING_RESULT_LIMIT,
+  slugifyKeyword,
+} from '@/lib/keywordHydration';
 
 export default function AddKeywordModal() {
   const {
@@ -96,7 +100,7 @@ export default function AddKeywordModal() {
         selectedAppId,
         selectedRegion,
         competitors,
-        100
+        PUBLIC_RANKING_RESULT_LIMIT
       );
 
       if (rankingSignals.sourceStatus === 'error') {
@@ -129,6 +133,7 @@ export default function AddKeywordModal() {
         ],
         competitorRanks: rankingSignals.competitorRanks,
         rankingApps: rankingSignals.rankingApps,
+        rankingResultCount: rankingSignals.rankingResultCount,
         popularitySource: 'estimated',
         difficultySource: 'itunes-search',
         rankSource: 'itunes-search',

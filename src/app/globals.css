@@ -1413,6 +1413,36 @@ textarea {
   background: var(--bg-secondary);
 }
 
+.keyword-research-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.keyword-research-filters label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.keyword-research-filters select {
+  height: 30px;
+  min-width: 132px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font: inherit;
+}
+
 .selected-keyword-chips {
   display: flex;
   align-items: center;
@@ -1758,6 +1788,23 @@ textarea {
   margin: var(--space-md) 0 var(--space-lg);
 }
 
+.ratings-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.ratings-chart-card {
+  min-height: 360px;
+}
+
+.ratings-chart-note {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  margin: -6px 0 var(--space-sm);
+}
+
 .ratings-grid {
   display: grid;
   grid-template-columns: minmax(280px, 0.8fr) minmax(360px, 1.2fr);
@@ -1953,6 +2000,7 @@ textarea {
   }
 
   .ratings-summary-grid,
+  .ratings-chart-grid,
   .ratings-grid {
     grid-template-columns: 1fr;
   }
@@ -2093,6 +2141,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .ratings-chart-grid {
+    grid-template-columns: 1fr;
+  }
+
   .reviews-list {
     max-height: none;
   }
@@ -2108,6 +2160,7 @@ textarea {
   }
 
   .keyword-research-toolbar,
+  .keyword-research-filters,
   .keyword-research-actions {
     align-items: stretch;
     flex-direction: column;

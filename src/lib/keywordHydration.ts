@@ -24,6 +24,7 @@ interface BuildStarterKeywordOptions {
 
 export interface RankingSignals {
   rankingApps: RankingAppSnapshot[];
+  rankingResultCount: number;
   currentRank: number | null;
   competitorRanks: Record<string, number | null>;
   topRatings: number[];
@@ -31,6 +32,7 @@ export interface RankingSignals {
 }
 
 const BLOCKED_TERMS = new Set(['suggestions', 'software', 'itunes', 'app store', 'search']);
+export const PUBLIC_RANKING_RESULT_LIMIT = 200;
 
 export function isBlockedKeyword(value: string): boolean {
   return BLOCKED_TERMS.has(normalizeTerm(value));
@@ -106,6 +108,7 @@ export function buildRankingSignals(
 
   return {
     rankingApps,
+    rankingResultCount: results.length,
     currentRank: selectedIndex === -1 ? null : selectedIndex + 1,
     competitorRanks,
     topRatings: results.slice(0, 10).map((app) => app.ratingCount),
@@ -118,7 +121,7 @@ export async function fetchRankingSignals(
   selectedAppId: string,
   region: string,
   competitors: TrackedApp[] = [],
-  limit = 100
+  limit = PUBLIC_RANKING_RESULT_LIMIT
 ): Promise<RankingSignals> {
   let results: AppMetadata[] = [];
   try {
@@ -126,6 +129,7 @@ export async function fetchRankingSignals(
   } catch {
     return {
       rankingApps: [],
+      rankingResultCount: 0,
       currentRank: null,
       competitorRanks: competitors.reduce<Record<string, number | null>>((acc, competitor) => {
         acc[competitor.id] = null;
@@ -160,7 +164,13 @@ export async function hydrateKeywordRanking(
   competitors: TrackedApp[],
   options: { appendHistory?: boolean } = {}
 ): Promise<TrackedKeyword> {
-  const signals = await fetchRankingSignals(keyword.keyword, selectedAppId, region, competitors, 100);
+  const signals = await fetchRankingSignals(
+    keyword.keyword,
+    selectedAppId,
+    region,
+    competitors,
+    PUBLIC_RANKING_RESULT_LIMIT
+  );
   if (signals.sourceStatus === 'error') {
     throw new Error(`Ranking search failed for "${keyword.keyword}"`);
   }
@@ -193,6 +203,7 @@ export async function hydrateKeywordRanking(
     difficultySource: 'itunes-search',
     competitorRanks: signals.competitorRanks,
     rankingApps: signals.rankingApps,
+    rankingResultCount: signals.rankingResultCount,
     rankHistory,
     rankSource: 'itunes-search',
     lastUpdated: new Date().toISOString(),
@@ -232,7 +243,13 @@ export async function buildStarterKeywordsForApp({
   for (const keyword of candidates) {
     if (starterKeywords.length >= limit) break;
 
-    const signals = await fetchRankingSignals(keyword, app.id, region, competitors, 100);
+    const signals = await fetchRankingSignals(
+      keyword,
+      app.id,
+      region,
+      competitors,
+      PUBLIC_RANKING_RESULT_LIMIT
+    );
     const popularity = calculatePopularity(keyword);
     const difficultyScore = calculateDifficultyScore(popularity, signals.topRatings);
     const firstNameToken = normalizeTerm(app.name).split(/\s+/)[0];
@@ -254,6 +271,7 @@ export async function buildStarterKeywordsForApp({
       rankSource: 'itunes-search',
       competitorRanks: signals.competitorRanks,
       rankingApps: signals.rankingApps,
+      rankingResultCount: signals.rankingResultCount,
       tags: isBrandTerm && brandTag ? [brandTag] : genericTag ? [genericTag] : [],
       note: null,
       rankHistory: [

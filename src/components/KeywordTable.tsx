@@ -232,9 +232,14 @@ export default function KeywordTable() {
     return new Date(date).toLocaleDateString();
   };
 
-  const rankedAppsForKeyword = (kw: TrackedKeyword): RankingAppSnapshot[] => {
+  const rankedAppsForKeyword = (
+    kw: TrackedKeyword
+  ): { apps: RankingAppSnapshot[]; total: number } => {
     if (kw.rankingApps?.length) {
-      return kw.rankingApps.slice(0, 8);
+      return {
+        apps: kw.rankingApps.slice(0, 8),
+        total: Math.max(kw.rankingResultCount ?? kw.rankingApps.length, kw.rankingApps.length),
+      };
     }
 
     const rankMap: Array<{ appId: string; rank: number | null }> = [
@@ -245,7 +250,7 @@ export default function KeywordTable() {
       })),
     ];
 
-    return rankMap
+    const appsForKeyword = rankMap
       .filter((entry) => entry.rank !== null)
       .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
       .map((entry) => {
@@ -268,6 +273,11 @@ export default function KeywordTable() {
       })
       .filter(Boolean)
       .slice(0, 8) as RankingAppSnapshot[];
+
+    return {
+      apps: appsForKeyword,
+      total: appsForKeyword.length,
+    };
   };
 
   const SortIndicator = ({ field }: { field: SortField }) => {
@@ -417,6 +427,8 @@ export default function KeywordTable() {
         <tbody>
           {sorted.map((kw) => {
             const rankedApps = rankedAppsForKeyword(kw);
+            const visibleRankingApps = rankedApps.apps.slice(0, 6);
+            const hiddenRankingAppCount = Math.max(0, rankedApps.total - visibleRankingApps.length);
 
             return (
               <tr
@@ -515,8 +527,9 @@ export default function KeywordTable() {
               </td>
               <td>
                 <div className="ranking-apps">
-                  {rankedApps.length > 0 ? (
-                    rankedApps.map((app) =>
+                  {visibleRankingApps.length > 0 ? (
+                    <>
+                    {visibleRankingApps.map((app) =>
                       app.appIcon ? (
                         <img
                           key={`${app.appId}-${app.rank}`}
@@ -535,6 +548,11 @@ export default function KeywordTable() {
                         </span>
                       )
                     )
+                    }
+                    {hiddenRankingAppCount > 0 && (
+                      <span className="ranking-app-more">+{hiddenRankingAppCount}</span>
+                    )}
+                    </>
                   ) : (
                     <span className="rank-value unranked">—</span>
                   )}

@@ -15,7 +15,10 @@ import {
 } from 'recharts';
 import { useAppStore } from '@/store/useAppStore';
 import { searchApps } from '@/lib/api';
-import { buildRankingSignals } from '@/lib/keywordHydration';
+import {
+  buildRankingSignals,
+  PUBLIC_RANKING_RESULT_LIMIT,
+} from '@/lib/keywordHydration';
 import type { RankingAppSnapshot } from '@/types';
 
 export default function DetailPanel() {
@@ -55,7 +58,11 @@ export default function DetailPanel() {
       const fetchApps = async () => {
         setIsLoadingApps(true);
         try {
-          const results = await searchApps(keywordTerm, keywordRegion || 'us', 100);
+          const results = await searchApps(
+            keywordTerm,
+            keywordRegion || 'us',
+            PUBLIC_RANKING_RESULT_LIMIT
+          );
           const competitors = apps.filter(
             (app) => app.isCompetitor && app.region === keywordRegion
           );

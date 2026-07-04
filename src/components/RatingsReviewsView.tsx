@@ -4,6 +4,17 @@
 
 import React from 'react';
 import { Globe2, MessageSquare, RefreshCw, Star } from 'lucide-react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { useAppStore } from '@/store/useAppStore';
 
 type Review = {
@@ -43,6 +54,17 @@ function formatDate(value: string | null): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+function formatCompact(value: number): string {
+  return new Intl.NumberFormat(undefined, {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function formatShortDate(date: Date): string {
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 export default function RatingsReviewsView() {
@@ -98,7 +120,7 @@ export default function RatingsReviewsView() {
     totalRatings > 0
       ? rows.reduce((sum, row) => sum + row.rating * row.ratingCount, 0) / totalRatings
       : selectedApp?.rating ?? 0;
-  const recentReviews = rows
+  const allReviews = rows
     .flatMap((row) =>
       row.reviews.map((review) => ({
         ...review,
@@ -109,8 +131,33 @@ export default function RatingsReviewsView() {
       const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
       const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
       return bTime - aTime;
-    })
-    .slice(0, 24);
+    });
+  const recentReviews = allReviews.slice(0, 24);
+  const totalRecentReviewEvents = allReviews.filter((review) => review.updatedAt).length;
+  const ratingHistory = Array.from({ length: 14 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (13 - index));
+    date.setHours(23, 59, 59, 999);
+    const reviewsThroughDate = allReviews.filter((review) => {
+      if (!review.updatedAt) return false;
+      return new Date(review.updatedAt).getTime() <= date.getTime();
+    });
+    const averageFromReviews =
+      reviewsThroughDate.length > 0
+        ? reviewsThroughDate.reduce((sum, review) => sum + review.rating, 0) / reviewsThroughDate.length
+        : averageRating;
+
+    return {
+      date: formatShortDate(date),
+      ratingCount: Math.max(0, totalRatings - totalRecentReviewEvents + reviewsThroughDate.length),
+      averageRating: Number(averageFromReviews.toFixed(2)),
+    };
+  });
+  const countryChartRows = rows.slice(0, 12).map((row) => ({
+    country: countryName(row.country),
+    ratings: row.ratingCount,
+    average: row.rating,
+  }));
 
   if (!selectedApp) {
     return (
@@ -173,6 +220,77 @@ export default function RatingsReviewsView() {
           <div className="overview-card-value">{recentReviews.length}</div>
           <div className="overview-card-subtitle">from public RSS feeds</div>
         </div>
+      </div>
+
+      <div className="ratings-chart-grid">
+        <section className="overview-card ratings-chart-card">
+          <div className="chart-section-title">
+            <Star size={14} />
+            Rating History
+          </div>
+          <div className="ratings-chart-note">
+            Count trend is reconstructed from the current public storefront total plus dated public reviews.
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={ratingHistory} margin={{ top: 16, right: 20, bottom: 8, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+              <XAxis dataKey="date" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} />
+              <YAxis
+                tickFormatter={formatCompact}
+                tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                width={48}
+              />
+              <Tooltip
+                formatter={(value) => [Number(value).toLocaleString(), 'Ratings']}
+                labelStyle={{ color: 'var(--text-primary)' }}
+              />
+              <Line
+                type="monotone"
+                dataKey="ratingCount"
+                stroke="var(--accent-primary)"
+                strokeWidth={2}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </section>
+
+        <section className="overview-card ratings-chart-card">
+          <div className="chart-section-title">
+            <Globe2 size={14} />
+            Ratings by Storefront
+          </div>
+          <div className="ratings-chart-note">
+            Top public storefronts by rating count from Apple lookup/review feeds.
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={countryChartRows} margin={{ top: 16, right: 20, bottom: 8, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+              <XAxis
+                dataKey="country"
+                tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                interval={0}
+                angle={-18}
+                textAnchor="end"
+                height={58}
+              />
+              <YAxis
+                tickFormatter={formatCompact}
+                tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                width={48}
+              />
+              <Tooltip
+                formatter={(value, name) => [
+                  name === 'ratings' ? Number(value).toLocaleString() : Number(value).toFixed(2),
+                  name === 'ratings' ? 'Ratings' : 'Average',
+                ]}
+                labelStyle={{ color: 'var(--text-primary)' }}
+              />
+              <Bar dataKey="ratings" fill="var(--accent-primary)" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
       </div>
 
       <div className="ratings-grid">

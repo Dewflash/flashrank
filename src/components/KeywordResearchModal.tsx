@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Lightbulb, Loader2, Plus, Search, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Lightbulb, Loader2, Plus, Search, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import type { AppMetadata, TrackedKeyword } from '@/types';
 import {
   buildRankingSignals,
+  PUBLIC_RANKING_RESULT_LIMIT,
   slugifyKeyword,
 } from '@/lib/keywordHydration';
 import type { RankingSignals } from '@/lib/keywordHydration';
@@ -25,10 +26,46 @@ interface SuggestionRow {
   position: number | null;
   opportunityScore: number;
   topApps: AppMetadata[];
+  rankingResultCount: number;
   rankingSignals: RankingSignals;
 }
 
 const MAX_ROWS = 60;
+type SuggestionSortField = 'opportunity' | 'popularity' | 'difficulty' | 'position' | 'apps';
+type SuggestionFilter = 'all' | 'low' | 'medium' | 'high';
+
+const ALL_TIME_POPULAR_KEYWORDS = [
+  'chatgpt',
+  'vpn',
+  'google',
+  'gmail',
+  'youtube',
+  'instagram',
+  'tiktok',
+  'whatsapp',
+  'facebook',
+  'telegram',
+  'netflix',
+  'spotify',
+  'amazon',
+  'maps',
+  'weather',
+  'photo editor',
+  'video editor',
+  'calendar',
+  'planner',
+  'habit tracker',
+  'fitness',
+  'ai',
+  'browser',
+  'translate',
+  'games',
+  'puzzle',
+  'farm',
+  'music',
+  'notes',
+  'budget',
+];
 
 function uniqueKeywords(values: string[]): string[] {
   const seen = new Set<string>();
@@ -96,12 +133,26 @@ export default function KeywordResearchModal() {
       ),
     [keywords, selectedAppId, selectedRegion]
   );
+  const rankedKeywordCount = useMemo(
+    () =>
+      keywords.filter(
+        (kw) =>
+          kw.appId === selectedAppId &&
+          kw.region === selectedRegion &&
+          kw.currentRank !== null
+      ).length,
+    [keywords, selectedAppId, selectedRegion]
+  );
 
   const genericTag = tags.find((tag) => tag.name.toLowerCase() === 'generic');
   const [rows, setRows] = useState<SuggestionRow[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   const [seedInput, setSeedInput] = useState('');
+  const [difficultyFilter, setDifficultyFilter] = useState<SuggestionFilter>('all');
+  const [popularityFilter, setPopularityFilter] = useState<SuggestionFilter>('all');
+  const [sortField, setSortField] = useState<SuggestionSortField>('opportunity');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,6 +181,7 @@ export default function KeywordResearchModal() {
         );
 
         const candidates = uniqueKeywords([
+          ...ALL_TIME_POPULAR_KEYWORDS,
           ...terms,
           ...hinted.flat(),
           `${selectedApp.name} game`,
@@ -144,7 +196,7 @@ export default function KeywordResearchModal() {
           const popularity = calculatePopularity(keyword);
           let results: AppMetadata[] = [];
           try {
-            results = await searchApps(keyword, selectedRegion, 25);
+            results = await searchApps(keyword, selectedRegion, PUBLIC_RANKING_RESULT_LIMIT);
           } catch {
             results = [];
           }
@@ -164,6 +216,7 @@ export default function KeywordResearchModal() {
             position,
             opportunityScore: scoreOpportunity(popularity, difficultyScore, position, hasCompetitor),
             topApps: results.slice(0, 8),
+            rankingResultCount: rankingSignals.rankingResultCount,
             rankingSignals,
           });
         }
@@ -192,7 +245,33 @@ export default function KeywordResearchModal() {
 
   const filteredRows = rows.filter((row) => {
     const normalizedQuery = query.trim().toLowerCase();
-    return normalizedQuery ? row.keyword.includes(normalizedQuery) : true;
+    if (normalizedQuery && !row.keyword.includes(normalizedQuery)) return false;
+    if (difficultyFilter !== 'all' && row.difficulty !== difficultyFilter) return false;
+    if (popularityFilter === 'high' && row.popularity < 70) return false;
+    if (popularityFilter === 'medium' && (row.popularity < 35 || row.popularity >= 70)) return false;
+    if (popularityFilter === 'low' && row.popularity >= 35) return false;
+    return true;
+  });
+  const rankedSuggestionCount = rows.filter((row) => row.position !== null).length;
+
+  const sortedRows = [...filteredRows].sort((a, b) => {
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    switch (sortField) {
+      case 'popularity':
+        return dir * (a.popularity - b.popularity);
+      case 'difficulty':
+        return dir * (a.difficultyScore - b.difficultyScore);
+      case 'position': {
+        const aPosition = a.position ?? 999;
+        const bPosition = b.position ?? 999;
+        return dir * (aPosition - bPosition);
+      }
+      case 'apps':
+        return dir * (a.rankingResultCount - b.rankingResultCount);
+      case 'opportunity':
+      default:
+        return dir * (a.opportunityScore - b.opportunityScore);
+    }
   });
 
   const selectedRows = rows.filter((row) => selected.has(row.keyword));
@@ -210,11 +289,11 @@ export default function KeywordResearchModal() {
   };
 
   const selectVisibleRows = () => {
-    setSelected(new Set(filteredRows.map((row) => row.keyword)));
+    setSelected(new Set(sortedRows.map((row) => row.keyword)));
   };
 
   const selectTopRows = () => {
-    setSelected(new Set(filteredRows.slice(0, Math.min(100, filteredRows.length)).map((row) => row.keyword)));
+    setSelected(new Set(sortedRows.slice(0, Math.min(100, sortedRows.length)).map((row) => row.keyword)));
   };
 
   const clearSelected = () => setSelected(new Set());
@@ -251,6 +330,7 @@ export default function KeywordResearchModal() {
           rankSource: 'itunes-search',
           competitorRanks: row.rankingSignals.competitorRanks,
           rankingApps: row.rankingSignals.rankingApps,
+          rankingResultCount: row.rankingSignals.rankingResultCount,
           tags: genericTag ? [genericTag] : [],
           note: null,
           rankHistory: [
@@ -268,6 +348,20 @@ export default function KeywordResearchModal() {
     close();
   };
 
+  const handleSort = (field: SuggestionSortField) => {
+    if (sortField === field) {
+      setSortDirection((direction) => (direction === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortField(field);
+    setSortDirection(field === 'position' ? 'asc' : 'desc');
+  };
+
+  const renderSortIndicator = (field: SuggestionSortField) => {
+    if (sortField !== field) return null;
+    return sortDirection === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
+  };
+
   if (!isKeywordResearchModalOpen) return null;
 
   return (
@@ -280,7 +374,9 @@ export default function KeywordResearchModal() {
               Keyword Suggestions
             </h2>
             <div className="modal-subtitle">
-              {selectedApp?.name ?? 'Selected app'} in {selectedRegion.toUpperCase()}
+              {rows.length > 0
+                ? `${selectedApp?.name ?? 'Selected app'} ranks in ${rankedSuggestionCount.toLocaleString()} of ${rows.length.toLocaleString()} scanned suggestions in ${selectedRegion.toUpperCase()}`
+                : `${rankedKeywordCount.toLocaleString()} tracked ranked keyword${rankedKeywordCount === 1 ? '' : 's'} in ${selectedRegion.toUpperCase()}`}
             </div>
           </div>
           <button className="btn btn-ghost btn-icon" onClick={close}>
@@ -322,6 +418,36 @@ export default function KeywordResearchModal() {
             </span>
           </div>
 
+          <div className="keyword-research-filters">
+            <label>
+              Popularity
+              <select
+                value={popularityFilter}
+                onChange={(event) => setPopularityFilter(event.target.value as SuggestionFilter)}
+              >
+                <option value="all">All</option>
+                <option value="high">High 70+</option>
+                <option value="medium">Medium 35-69</option>
+                <option value="low">Low below 35</option>
+              </select>
+            </label>
+            <label>
+              Difficulty
+              <select
+                value={difficultyFilter}
+                onChange={(event) => setDifficultyFilter(event.target.value as SuggestionFilter)}
+              >
+                <option value="all">All</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+            <span className="selection-muted">
+              Showing {sortedRows.length} of {rows.length}; includes public popular seed terms and Apple search hints.
+            </span>
+          </div>
+
           <div className="keyword-research-actions">
             <div className="selected-keyword-chips">
               {selectedRows.length === 0 ? (
@@ -344,10 +470,10 @@ export default function KeywordResearchModal() {
               )}
             </div>
             <div className="keyword-bulk-actions">
-              <button className="btn btn-secondary" onClick={selectTopRows} disabled={filteredRows.length === 0}>
-                Select Top {Math.min(100, filteredRows.length) || ''}
+              <button className="btn btn-secondary" onClick={selectTopRows} disabled={sortedRows.length === 0}>
+                Select Top {Math.min(100, sortedRows.length) || ''}
               </button>
-              <button className="btn btn-secondary" onClick={selectVisibleRows} disabled={filteredRows.length === 0}>
+              <button className="btn btn-secondary" onClick={selectVisibleRows} disabled={sortedRows.length === 0}>
                 Select Visible
               </button>
               <button className="btn btn-ghost" onClick={clearSelected} disabled={selected.size === 0}>
@@ -371,15 +497,25 @@ export default function KeywordResearchModal() {
                   <tr>
                     <th style={{ width: 44 }}>Add</th>
                     <th>Keyword</th>
-                    <th>Popularity</th>
-                    <th>Difficulty</th>
-                    <th>Position</th>
-                    <th>Opportunity</th>
-                    <th>Apps in Ranking</th>
+                    <th onClick={() => handleSort('popularity')}>
+                      <div className="th-content">Popularity {renderSortIndicator('popularity')}</div>
+                    </th>
+                    <th onClick={() => handleSort('difficulty')}>
+                      <div className="th-content">Difficulty {renderSortIndicator('difficulty')}</div>
+                    </th>
+                    <th onClick={() => handleSort('position')}>
+                      <div className="th-content">Position {renderSortIndicator('position')}</div>
+                    </th>
+                    <th onClick={() => handleSort('opportunity')}>
+                      <div className="th-content">Opportunity {renderSortIndicator('opportunity')}</div>
+                    </th>
+                    <th onClick={() => handleSort('apps')}>
+                      <div className="th-content">Apps in Ranking {renderSortIndicator('apps')}</div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRows.map((row) => (
+                  {sortedRows.map((row) => (
                     <tr key={row.keyword} onClick={() => toggle(row.keyword)}>
                       <td>
                         <span className={`select-dot ${selected.has(row.keyword) ? 'selected' : ''}`}>
@@ -433,8 +569,8 @@ export default function KeywordResearchModal() {
                               </span>
                             )
                           ))}
-                          {row.topApps.length > 6 && (
-                            <span className="ranking-app-more">+{row.topApps.length - 6}</span>
+                          {row.rankingResultCount > 6 && (
+                            <span className="ranking-app-more">+{row.rankingResultCount - 6}</span>
                           )}
                         </div>
                       </td>
@@ -442,7 +578,7 @@ export default function KeywordResearchModal() {
                   ))}
                 </tbody>
               </table>
-              {filteredRows.length === 0 && (
+              {sortedRows.length === 0 && (
                 <div className="empty-state">
                   <div className="empty-state-title">No suggestions match</div>
                   <div className="empty-state-text">Clear the filter or run another app search.</div>

@@ -13,6 +13,7 @@ import {
 import {
   fetchRankingSignals,
   hydrateKeywordRanking,
+  PUBLIC_RANKING_RESULT_LIMIT,
   slugifyKeyword,
 } from '@/lib/keywordHydration';
 import type { RankingSignals } from '@/lib/keywordHydration';
@@ -325,7 +326,13 @@ export default function CompetitorsView() {
           [competitor.id]: `Scanning ${index + 1} of ${candidates.length}: ${candidate}`,
         }));
 
-        const signals = await fetchRankingSignals(candidate, selectedAppId, selectedRegion, competitors, 100);
+        const signals = await fetchRankingSignals(
+          candidate,
+          selectedAppId,
+          selectedRegion,
+          competitors,
+          PUBLIC_RANKING_RESULT_LIMIT
+        );
         const competitorRank = signals.competitorRanks[competitor.id] ?? null;
         if (competitorRank === null) continue;
 
@@ -368,6 +375,7 @@ export default function CompetitorsView() {
           rankSource: 'itunes-search',
           competitorRanks: opportunity.signals.competitorRanks,
           rankingApps: opportunity.signals.rankingApps,
+          rankingResultCount: opportunity.signals.rankingResultCount,
           tags: competitorTag ? [competitorTag] : [],
           note: null,
           rankHistory: [
