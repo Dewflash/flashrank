@@ -11,6 +11,7 @@ import {
   ViewMode,
 } from '@/types';
 import { seedApps, seedKeywords, seedTags } from '@/data/seedData';
+import { isBlockedKeyword } from '@/lib/keywordHydration';
 
 // ─── Action types ───────────────────────────────────────────────────────────
 
@@ -23,6 +24,7 @@ interface AppActions {
 
   // Keyword management
   addKeyword: (keyword: TrackedKeyword) => void;
+  upsertKeywords: (keywords: TrackedKeyword[]) => void;
   removeKeyword: (keywordId: string) => void;
   setSelectedKeyword: (keywordId: string | null) => void;
   updateKeywordTags: (keywordId: string, tags: KeywordTag[]) => void;
@@ -54,6 +56,24 @@ interface AppActions {
 }
 
 // ─── Store ──────────────────────────────────────────────────────────────────
+
+function sanitizeKeywords(keywords: TrackedKeyword[] | undefined): TrackedKeyword[] {
+  if (!Array.isArray(keywords)) return [];
+
+  const byIdentity = new Map<string, TrackedKeyword>();
+  keywords.forEach((keyword) => {
+    const normalized = keyword.keyword.trim().toLowerCase();
+    if (!normalized || isBlockedKeyword(normalized)) return;
+
+    const identity = `${keyword.region}:${keyword.appId}:${normalized}`;
+    const existing = byIdentity.get(identity);
+    if (!existing || new Date(keyword.lastUpdated).getTime() > new Date(existing.lastUpdated).getTime()) {
+      byIdentity.set(identity, keyword);
+    }
+  });
+
+  return Array.from(byIdentity.values());
+}
 
 export const useAppStore = create<AppState & AppActions>()(
   persist(
@@ -146,7 +166,23 @@ export const useAppStore = create<AppState & AppActions>()(
   // ── Keyword management ─────────────────────────────────────
 
   addKeyword: (keyword) =>
-    set((state) => ({ keywords: [...state.keywords, keyword] })),
+    set((state) => {
+      const existingIndex = state.keywords.findIndex((kw) => kw.id === keyword.id);
+      if (existingIndex === -1) return { keywords: [...state.keywords, keyword] };
+
+      return {
+        keywords: state.keywords.map((kw, index) =>
+          index === existingIndex ? keyword : kw
+        ),
+      };
+    }),
+
+  upsertKeywords: (nextKeywords) =>
+    set((state) => {
+      const byId = new Map(state.keywords.map((keyword) => [keyword.id, keyword]));
+      nextKeywords.forEach((keyword) => byId.set(keyword.id, keyword));
+      return { keywords: Array.from(byId.values()) };
+    }),
 
   removeKeyword: (keywordId) =>
     set((state) => ({
@@ -341,7 +377,15 @@ export const useAppStore = create<AppState & AppActions>()(
 }),
 {
   name: 'flashrank-storage', // key in localStorage
+      version: 2,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState) => {
+        const state = persistedState as Partial<AppState>;
+        return {
+          ...state,
+          keywords: sanitizeKeywords(state.keywords),
+        };
+      },
       partialize: (state) => ({
         // What fields to persist
         apps: state.apps,

@@ -15,31 +15,56 @@ import {
 } from 'recharts';
 import { useAppStore } from '@/store/useAppStore';
 import { searchApps } from '@/lib/api';
+import { buildRankingSignals } from '@/lib/keywordHydration';
+import type { RankingAppSnapshot } from '@/types';
 
 export default function DetailPanel() {
   const {
     keywords,
     selectedKeywordId,
     isDetailPanelOpen,
+    apps,
+    selectedAppId,
     setDetailPanelOpen,
     setSelectedKeyword,
     updateKeywordNote,
   } = useAppStore();
 
   const keyword = keywords.find((k) => k.id === selectedKeywordId);
+  const keywordAppId = keyword?.appId;
+  const keywordId = keyword?.id;
+  const keywordRegion = keyword?.region;
+  const keywordTerm = keyword?.keyword;
+  const keywordRankingApps = keyword?.rankingApps;
   const [noteText, setNoteText] = useState('');
-  const [topApps, setTopApps] = useState<any[]>([]);
+  const [topApps, setTopApps] = useState<RankingAppSnapshot[]>([]);
   const [isLoadingApps, setIsLoadingApps] = useState(false);
 
   useEffect(() => {
-    if (keyword) {
-      setNoteText(keyword.note?.text || '');
+    if (keyword?.note) {
+      setNoteText(keyword.note.text);
+    } else {
+      setNoteText('');
+    }
+  }, [keyword?.note]);
+
+  useEffect(() => {
+    if (keywordId && keywordTerm) {
+      setTopApps(keywordRankingApps?.slice(0, 10) ?? []);
       
       const fetchApps = async () => {
         setIsLoadingApps(true);
         try {
-          const results = await searchApps(keyword.keyword, keyword.region || 'us', 100);
-          setTopApps(results.slice(0, 10));
+          const results = await searchApps(keywordTerm, keywordRegion || 'us', 100);
+          const competitors = apps.filter(
+            (app) => app.isCompetitor && app.region === keywordRegion
+          );
+          const rankingSignals = buildRankingSignals(
+            results,
+            selectedAppId ?? keywordAppId ?? '',
+            competitors
+          );
+          setTopApps(rankingSignals.rankingApps.slice(0, 10));
         } catch (e) {
           console.error("Failed to fetch top apps", e);
         } finally {
@@ -48,15 +73,15 @@ export default function DetailPanel() {
       };
       fetchApps();
     }
-  }, [keyword?.id]);
-
-  useEffect(() => {
-    if (keyword?.note) {
-      setNoteText(keyword.note.text);
-    } else {
-      setNoteText('');
-    }
-  }, [keyword]);
+  }, [
+    apps,
+    keywordAppId,
+    keywordId,
+    keywordRankingApps,
+    keywordRegion,
+    keywordTerm,
+    selectedAppId,
+  ]);
 
   const handleNoteBlur = () => {
     if (keyword) {
@@ -248,20 +273,23 @@ export default function DetailPanel() {
               Loading top apps...
             </div>
           ) : (
-            topApps.map((app, idx) => (
-              <div key={app.id} className="top-app-item">
-                <span className="top-app-rank">{idx + 1}</span>
-                {app.icon ? (
+            topApps.map((app) => (
+              <div
+                key={`${app.appId}-${app.rank}`}
+                className={`top-app-item ${app.isSelectedApp ? 'selected' : ''} ${app.isTrackedCompetitor ? 'competitor' : ''}`}
+              >
+                <span className="top-app-rank">{app.rank}</span>
+                {app.appIcon ? (
                   <img
-                    src={app.icon}
-                    alt={app.name}
+                    src={app.appIcon}
+                    alt={app.appName}
                     className="top-app-icon"
                   />
                 ) : (
                   <div
                     className="top-app-icon"
                     style={{
-                      background: `hsl(${(idx + 1) * 36}, 60%, 50%)`,
+                      background: `hsl(${app.rank * 36}, 60%, 50%)`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -270,11 +298,15 @@ export default function DetailPanel() {
                       fontWeight: 600,
                     }}
                   >
-                    {app.name.charAt(0)}
+                    {app.appName.charAt(0)}
                   </div>
                 )}
                 <div className="top-app-info">
-                  <div className="top-app-name">{app.name}</div>
+                  <div className="top-app-name">
+                    {app.appName}
+                    {app.isSelectedApp && <span className="source-pill verified">Your app</span>}
+                    {app.isTrackedCompetitor && <span className="source-pill">Competitor</span>}
+                  </div>
                   <div className="top-app-developer">{app.developer}</div>
                 </div>
                 <div className="top-app-rating">

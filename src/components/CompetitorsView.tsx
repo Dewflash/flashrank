@@ -3,14 +3,18 @@
 import React from 'react';
 import { Users, Plus, Trash2, ArrowUp, ArrowDown, Search, Loader2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import type { AppMetadata, TrackedApp, TrackedKeyword } from '@/types';
+import type { RankingAppSnapshot, TrackedApp, TrackedKeyword } from '@/types';
 import {
   calculateDifficulty,
   calculateDifficultyScore,
   calculatePopularity,
   getKeywordSuggestions,
-  searchApps,
 } from '@/lib/api';
+import {
+  fetchRankingSignals,
+  hydrateKeywordRanking,
+  slugifyKeyword,
+} from '@/lib/keywordHydration';
 
 const MAX_EXTRACTED_KEYWORDS = 18;
 
@@ -47,9 +51,11 @@ export default function CompetitorsView() {
     keywords,
     selectedAppId,
     selectedRegion,
+    addApp,
     removeApp,
     setAddAppModalOpen,
     addKeyword,
+    upsertKeywords,
     tags,
   } = useAppStore();
   const [extractingId, setExtractingId] = React.useState<string | null>(null);
@@ -61,6 +67,139 @@ export default function CompetitorsView() {
     (k) => k.appId === selectedAppId && k.region === selectedRegion
   );
   const competitorTag = tags.find((tag) => tag.name.toLowerCase() === 'competitor');
+
+  const competitorStats = React.useMemo(() => {
+    return new Map(
+      competitors.map((competitor) => {
+        let shared = 0;
+        let top10 = 0;
+        let outranking = 0;
+        let bestRank: number | null = null;
+
+        appKeywords.forEach((keyword) => {
+          const observedRank =
+            keyword.competitorRanks?.[competitor.id] ??
+            keyword.rankingApps?.find((app) => app.appId === competitor.id)?.rank ??
+            null;
+          if (observedRank === null) return;
+
+          shared += 1;
+          if (observedRank <= 10) top10 += 1;
+          bestRank = bestRank === null ? observedRank : Math.min(bestRank, observedRank);
+          if (keyword.currentRank === null || observedRank < keyword.currentRank) {
+            outranking += 1;
+          }
+        });
+
+        return [
+          competitor.id,
+          {
+            shared,
+            top10,
+            outranking,
+            bestRank,
+          },
+        ];
+      })
+    );
+  }, [appKeywords, competitors]);
+
+  const observedCompetitors = React.useMemo(() => {
+    const knownAppIds = new Set(apps.filter((app) => app.region === selectedRegion).map((app) => app.id));
+    const byAppId = new Map<
+      string,
+      {
+        snapshot: RankingAppSnapshot;
+        appearances: number;
+        bestRank: number;
+        outranking: number;
+      }
+    >();
+
+    appKeywords.forEach((keyword) => {
+      (keyword.rankingApps ?? []).forEach((snapshot) => {
+        if (snapshot.isSelectedApp || knownAppIds.has(snapshot.appId)) return;
+
+        const existing = byAppId.get(snapshot.appId);
+        const outranksSelected = keyword.currentRank === null || snapshot.rank < keyword.currentRank ? 1 : 0;
+
+        if (!existing) {
+          byAppId.set(snapshot.appId, {
+            snapshot,
+            appearances: 1,
+            bestRank: snapshot.rank,
+            outranking: outranksSelected,
+          });
+          return;
+        }
+
+        existing.appearances += 1;
+        existing.bestRank = Math.min(existing.bestRank, snapshot.rank);
+        existing.outranking += outranksSelected;
+      });
+    });
+
+    return Array.from(byAppId.values())
+      .sort((a, b) => {
+        if (b.outranking !== a.outranking) return b.outranking - a.outranking;
+        if (b.appearances !== a.appearances) return b.appearances - a.appearances;
+        return a.bestRank - b.bestRank;
+      })
+      .slice(0, 6);
+  }, [appKeywords, apps, selectedRegion]);
+
+  const trackObservedCompetitor = async (snapshot: RankingAppSnapshot) => {
+    if (!selectedAppId || !primaryApp || extractingId) return;
+
+    const competitor: TrackedApp = {
+      id: snapshot.appId,
+      name: snapshot.appName,
+      developer: snapshot.developer,
+      icon: snapshot.appIcon,
+      price: 'Free',
+      rating: snapshot.rating,
+      ratingCount: snapshot.ratingCount,
+      category: primaryApp.category,
+      platform: primaryApp.platform,
+      bundleId: snapshot.bundleId,
+      url: snapshot.url,
+      isCompetitor: true,
+      region: selectedRegion,
+      addedAt: new Date().toISOString(),
+    };
+
+    setExtractingId(competitor.id);
+    setExtractMessages((current) => ({
+      ...current,
+      [competitor.id]: 'Adding competitor and backfilling comparisons...',
+    }));
+
+    try {
+      addApp(competitor);
+      const nextCompetitors = [
+        ...competitors.filter((app) => app.id !== competitor.id),
+        competitor,
+      ];
+      const hydrated = [];
+      for (const keyword of appKeywords) {
+        hydrated.push(
+          await hydrateKeywordRanking(keyword, selectedAppId, selectedRegion, nextCompetitors)
+        );
+      }
+      upsertKeywords(hydrated);
+      setExtractMessages((current) => ({
+        ...current,
+        [competitor.id]: `Added from observed rankings and compared against ${hydrated.length} keyword${hydrated.length === 1 ? '' : 's'}.`,
+      }));
+    } catch {
+      setExtractMessages((current) => ({
+        ...current,
+        [competitor.id]: 'Could not add this competitor. Check the network and try again.',
+      }));
+    } finally {
+      setExtractingId(null);
+    }
+  };
 
   const extractCompetitorKeywords = async (competitor: TrackedApp) => {
     if (!selectedAppId || !primaryApp || extractingId) return;
@@ -98,25 +237,24 @@ export default function CompetitorsView() {
         .slice(0, 40);
 
       const extracted: TrackedKeyword[] = [];
+      const hydratedExisting: TrackedKeyword[] = [];
+      for (const keyword of appKeywords) {
+        hydratedExisting.push(
+          await hydrateKeywordRanking(keyword, selectedAppId, selectedRegion, competitors)
+        );
+      }
+
       for (const candidate of candidates) {
         if (extracted.length >= MAX_EXTRACTED_KEYWORDS) break;
 
-        let results: AppMetadata[] = [];
-        try {
-          results = await searchApps(candidate, selectedRegion, 30);
-        } catch {
-          results = [];
-        }
+        const signals = await fetchRankingSignals(candidate, selectedAppId, selectedRegion, competitors, 100);
+        const competitorRank = signals.competitorRanks[competitor.id] ?? null;
+        if (competitorRank === null) continue;
 
-        const competitorIndex = results.findIndex((app) => app.id === competitor.id);
-        if (competitorIndex === -1) continue;
-
-        const ownIndex = results.findIndex((app) => app.id === selectedAppId);
-        const topRatings = results.slice(0, 10).map((app) => app.ratingCount);
         const popularity = calculatePopularity(candidate);
-        const difficultyScore = calculateDifficultyScore(popularity, topRatings);
+        const difficultyScore = calculateDifficultyScore(popularity, signals.topRatings);
 
-        const keywordSlug = candidate.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const keywordSlug = slugifyKeyword(candidate);
 
         extracted.push({
           id: `kw-${selectedRegion}-${selectedAppId}-${competitor.id}-${keywordSlug}`,
@@ -125,22 +263,21 @@ export default function CompetitorsView() {
           region: selectedRegion,
           popularity,
           popularitySource: 'estimated',
-          difficulty: calculateDifficulty(popularity, topRatings),
+          difficulty: calculateDifficulty(popularity, signals.topRatings),
           difficultyScore,
           difficultySource: 'itunes-search',
-          currentRank: ownIndex === -1 ? null : ownIndex + 1,
+          currentRank: signals.currentRank,
           previousRank: null,
           rankChange: null,
           rankSource: 'itunes-search',
-          competitorRanks: {
-            [competitor.id]: competitorIndex + 1,
-          },
+          competitorRanks: signals.competitorRanks,
+          rankingApps: signals.rankingApps,
           tags: competitorTag ? [competitorTag] : [],
           note: null,
           rankHistory: [
             {
               date: new Date().toISOString(),
-              rank: ownIndex === -1 ? null : ownIndex + 1,
+              rank: signals.currentRank,
             },
           ],
           lastUpdated: new Date().toISOString(),
@@ -148,12 +285,13 @@ export default function CompetitorsView() {
         });
       }
 
+      upsertKeywords(hydratedExisting);
       extracted.forEach(addKeyword);
       setExtractMessages((current) => ({
         ...current,
         [competitor.id]:
-          extracted.length > 0
-            ? `Added ${extracted.length} observed ranking keyword${extracted.length === 1 ? '' : 's'}.`
+          extracted.length > 0 || hydratedExisting.length > 0
+            ? `Updated ${hydratedExisting.length} tracked keyword${hydratedExisting.length === 1 ? '' : 's'} and added ${extracted.length} observed opportunity keyword${extracted.length === 1 ? '' : 's'}.`
             : 'No new observed ranking keywords found in public search results.',
       }));
     } catch {
@@ -165,6 +303,73 @@ export default function CompetitorsView() {
       setExtractingId(null);
     }
   };
+
+  const observedCompetitorSection = observedCompetitors.length > 0 && (
+    <div style={{ marginBottom: 'var(--space-xl)' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          gap: 'var(--space-md)',
+          marginBottom: 'var(--space-md)',
+        }}
+      >
+        <div>
+          <h3 style={{ fontSize: '16px', fontWeight: 600 }}>Observed in Rankings</h3>
+          <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: 4 }}>
+            Apps repeatedly appearing above or beside your app in tracked keyword results.
+          </p>
+        </div>
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+          gap: 'var(--space-md)',
+        }}
+      >
+        {observedCompetitors.map(({ snapshot, appearances, bestRank, outranking }) => (
+          <div key={snapshot.appId} className="overview-card compact-card">
+            <div className="competitor-header" style={{ paddingTop: 0 }}>
+              {snapshot.appIcon ? (
+                <img src={snapshot.appIcon} alt={snapshot.appName} className="competitor-app-icon" />
+              ) : (
+                <div className="competitor-app-icon placeholder">{snapshot.appName.charAt(0)}</div>
+              )}
+              <div className="competitor-app-info">
+                <h3>{snapshot.appName}</h3>
+                <p>{snapshot.developer}</p>
+              </div>
+            </div>
+            <div className="comparison-metrics">
+              <span>Seen {appearances}x</span>
+              <span>Best #{bestRank}</span>
+              <span>Outranks {outranking}</span>
+            </div>
+            <button
+              className="btn btn-secondary"
+              style={{ width: '100%', marginTop: 'var(--space-md)' }}
+              onClick={() => void trackObservedCompetitor(snapshot)}
+              disabled={extractingId !== null}
+            >
+              {extractingId === snapshot.appId ? (
+                <Loader2 size={14} className="spin" />
+              ) : (
+                <Plus size={14} />
+              )}
+              Add as competitor
+            </button>
+            {extractMessages[snapshot.appId] && (
+              <div className="credential-note" style={{ marginTop: 8 }}>
+                {extractMessages[snapshot.appId]}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-lg)' }}>
@@ -194,12 +399,18 @@ export default function CompetitorsView() {
         </button>
       </div>
 
+      {observedCompetitorSection}
+
       {competitors.length === 0 ? (
         <div className="empty-state" style={{ marginTop: '80px' }}>
           <Users size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
-          <div className="empty-state-title">No competitors added</div>
+          <div className="empty-state-title">
+            {observedCompetitors.length > 0 ? 'No tracked competitors yet' : 'No competitors added'}
+          </div>
           <div className="empty-state-text">
-            Add competitor apps to compare keyword rankings and discover new opportunities.
+            {observedCompetitors.length > 0
+              ? 'Add an observed app above to turn ranking sightings into side-by-side comparison data.'
+              : 'Add competitor apps to compare keyword rankings and discover new opportunities.'}
           </div>
           <button
             className="btn btn-primary"
@@ -286,18 +497,36 @@ export default function CompetitorsView() {
                 >
                   <div>
                     <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
-                      Rating
+                      Shared
                     </div>
                     <div style={{ fontSize: '16px', fontWeight: 600 }}>
-                      ⭐ {comp.rating.toFixed(1)}
+                      {competitorStats.get(comp.id)?.shared ?? 0}
                     </div>
                   </div>
                   <div>
                     <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
-                      Reviews
+                      Outranks
                     </div>
                     <div style={{ fontSize: '16px', fontWeight: 600 }}>
-                      {comp.ratingCount.toLocaleString()}
+                      {competitorStats.get(comp.id)?.outranking ?? 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
+                      Top 10
+                    </div>
+                    <div style={{ fontSize: '16px', fontWeight: 600 }}>
+                      {competitorStats.get(comp.id)?.top10 ?? 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
+                      Best
+                    </div>
+                    <div style={{ fontSize: '16px', fontWeight: 600 }}>
+                      {competitorStats.get(comp.id)?.bestRank
+                        ? `#${competitorStats.get(comp.id)?.bestRank}`
+                        : '—'}
                     </div>
                   </div>
                 </div>
@@ -379,7 +608,10 @@ export default function CompetitorsView() {
                         </div>
                       </td>
                       {competitors.map((comp) => {
-                        const competitorRank = kw.competitorRanks?.[comp.id] ?? null;
+                        const competitorRank =
+                          kw.competitorRanks?.[comp.id] ??
+                          kw.rankingApps?.find((app) => app.appId === comp.id)?.rank ??
+                          null;
                         return (
                           <td key={comp.id}>
                             {competitorRank ? (

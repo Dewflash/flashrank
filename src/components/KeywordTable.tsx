@@ -13,8 +13,9 @@ import {
   Lightbulb,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import { TrackedKeyword, SortField } from '@/types';
+import type { RankingAppSnapshot, TrackedKeyword, SortField } from '@/types';
 import ContextMenu from '@/components/ContextMenu';
+import { runBackgroundSync } from '@/lib/syncEngine';
 
 type TranslationState =
   | { status: 'idle'; text: null }
@@ -97,6 +98,7 @@ export default function KeywordTable() {
     sort,
     setSort,
     filter,
+    isRefreshing,
   } = useAppStore();
 
   const [contextMenu, setContextMenu] = useState<{
@@ -105,6 +107,7 @@ export default function KeywordTable() {
     keywordId: string;
   } | null>(null);
   const [now, setNow] = useState<number | null>(null);
+  const [autoHydrateKey, setAutoHydrateKey] = useState<string | null>(null);
 
   useEffect(() => {
     setNow(Date.now());
@@ -133,6 +136,28 @@ export default function KeywordTable() {
     }
     return true;
   });
+
+  const hasMissingRankingSnapshots = filtered.some((keyword) => !keyword.rankingApps?.length);
+
+  useEffect(() => {
+    if (!selectedAppId || !hasMissingRankingSnapshots || isRefreshing) return;
+
+    const hydrationKey = `${selectedRegion}:${selectedAppId}`;
+    if (autoHydrateKey === hydrationKey) return;
+
+    setAutoHydrateKey(hydrationKey);
+    void runBackgroundSync({
+      force: true,
+      appId: selectedAppId,
+      region: selectedRegion,
+    });
+  }, [
+    autoHydrateKey,
+    hasMissingRankingSnapshots,
+    isRefreshing,
+    selectedAppId,
+    selectedRegion,
+  ]);
 
   // Sort keywords
   const sorted = [...filtered].sort((a, b) => {
@@ -203,7 +228,11 @@ export default function KeywordTable() {
     return new Date(date).toLocaleDateString();
   };
 
-  const rankedAppsForKeyword = (kw: TrackedKeyword) => {
+  const rankedAppsForKeyword = (kw: TrackedKeyword): RankingAppSnapshot[] => {
+    if (kw.rankingApps?.length) {
+      return kw.rankingApps.slice(0, 8);
+    }
+
     const rankMap: Array<{ appId: string; rank: number | null }> = [
       { appId: kw.appId, rank: kw.currentRank },
       ...Object.entries(kw.competitorRanks ?? {}).map(([appId, rank]) => ({
@@ -215,9 +244,26 @@ export default function KeywordTable() {
     return rankMap
       .filter((entry) => entry.rank !== null)
       .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
-      .map((entry) => apps.find((app) => app.id === entry.appId))
+      .map((entry) => {
+        const app = apps.find((trackedApp) => trackedApp.id === entry.appId);
+        if (!app || entry.rank === null) return null;
+
+        return {
+          rank: entry.rank,
+          appId: app.id,
+          appName: app.name,
+          appIcon: app.icon,
+          developer: app.developer,
+          rating: app.rating,
+          ratingCount: app.ratingCount,
+          bundleId: app.bundleId,
+          url: app.url,
+          isSelectedApp: app.id === kw.appId,
+          isTrackedCompetitor: app.isCompetitor,
+        };
+      })
       .filter(Boolean)
-      .slice(0, 8);
+      .slice(0, 8) as RankingAppSnapshot[];
   };
 
   const SortIndicator = ({ field }: { field: SortField }) => {
@@ -436,16 +482,21 @@ export default function KeywordTable() {
                 <div className="ranking-apps">
                   {rankedApps.length > 0 ? (
                     rankedApps.map((app) =>
-                      app?.icon ? (
+                      app.appIcon ? (
                         <img
-                          key={app.id}
-                          src={app.icon}
-                          alt={app.name}
-                          className="ranking-app-icon"
+                          key={`${app.appId}-${app.rank}`}
+                          src={app.appIcon}
+                          alt={app.appName}
+                          className={`ranking-app-icon ${app.isSelectedApp ? 'selected' : ''} ${app.isTrackedCompetitor ? 'competitor' : ''}`}
+                          title={`#${app.rank} ${app.appName}`}
                         />
                       ) : (
-                        <span key={app?.id} className="ranking-app-icon placeholder">
-                          {app?.name.charAt(0) ?? '?'}
+                        <span
+                          key={`${app.appId}-${app.rank}`}
+                          className={`ranking-app-icon placeholder ${app.isSelectedApp ? 'selected' : ''} ${app.isTrackedCompetitor ? 'competitor' : ''}`}
+                          title={`#${app.rank} ${app.appName}`}
+                        >
+                          {app.appName.charAt(0)}
                         </span>
                       )
                     )

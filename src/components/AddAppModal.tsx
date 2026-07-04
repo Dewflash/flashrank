@@ -5,7 +5,10 @@ import { X, Search } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import type { AppMetadata, TrackedApp } from '@/types';
 import { searchApps } from '@/lib/api';
-import { buildStarterKeywordsForApp } from '@/lib/keywordHydration';
+import {
+  buildStarterKeywordsForApp,
+  hydrateKeywordRanking,
+} from '@/lib/keywordHydration';
 
 export default function AddAppModal() {
   const {
@@ -16,10 +19,12 @@ export default function AddAppModal() {
     setViewMode,
     setKeywordResearchModalOpen,
     selectedRegion,
+    selectedAppId,
     keywords,
     tags,
     apps,
     addKeyword,
+    upsertKeywords,
   } =
     useAppStore();
 
@@ -66,30 +71,58 @@ export default function AddAppModal() {
     };
 
     setIsAdding(true);
-    addApp(trackedApp);
-    if (!addAsCompetitor) {
-      setSelectedApp(trackedApp.id);
-      setViewMode('keywords');
-      const competitors = apps.filter(
-        (existingApp) => existingApp.isCompetitor && existingApp.region === selectedRegion
-      );
-      try {
-        const starterKeywords = await buildStarterKeywordsForApp({
-          app: trackedApp,
-          region: selectedRegion,
-          existingKeywords: keywords,
-          tags,
-          competitors,
-          limit: 10,
-        });
-        starterKeywords.forEach(addKeyword);
-      } catch {
-        // The suggestions modal still opens so the user can retry manually.
+    try {
+      addApp(trackedApp);
+      if (!addAsCompetitor) {
+        setSelectedApp(trackedApp.id);
+        setViewMode('keywords');
+        const competitors = apps.filter(
+          (existingApp) => existingApp.isCompetitor && existingApp.region === selectedRegion
+        );
+        try {
+          const starterKeywords = await buildStarterKeywordsForApp({
+            app: trackedApp,
+            region: selectedRegion,
+            existingKeywords: keywords,
+            tags,
+            competitors,
+            limit: 10,
+          });
+          starterKeywords.forEach(addKeyword);
+        } catch {
+          // The suggestions modal still opens so the user can retry manually.
+        }
+        window.setTimeout(() => setKeywordResearchModalOpen(true), 120);
+      } else if (selectedAppId) {
+        const nextCompetitors = [
+          ...apps.filter(
+            (existingApp) =>
+              existingApp.isCompetitor &&
+              existingApp.region === selectedRegion &&
+              existingApp.id !== trackedApp.id
+          ),
+          trackedApp,
+        ];
+        const selectedKeywords = keywords.filter(
+          (keyword) => keyword.appId === selectedAppId && keyword.region === selectedRegion
+        );
+        const hydrated = [];
+        for (const keyword of selectedKeywords) {
+          try {
+            hydrated.push(
+              await hydrateKeywordRanking(keyword, selectedAppId, selectedRegion, nextCompetitors)
+            );
+          } catch {
+            // Keep the competitor even if one keyword refresh fails.
+          }
+        }
+        upsertKeywords(hydrated);
+        setViewMode('competitors');
       }
-      window.setTimeout(() => setKeywordResearchModalOpen(true), 120);
+    } finally {
+      setIsAdding(false);
+      handleClose();
     }
-    setIsAdding(false);
-    handleClose();
   };
 
   const handleClose = () => {

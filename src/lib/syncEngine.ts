@@ -1,9 +1,5 @@
 import { useAppStore } from '@/store/useAppStore';
-import {
-  calculateDifficulty,
-  calculateDifficultyScore,
-  searchApps,
-} from '@/lib/api';
+import { hydrateKeywordRanking } from '@/lib/keywordHydration';
 import { isProviderReady } from '@/lib/credentials';
 
 /**
@@ -64,19 +60,6 @@ export async function runBackgroundSync(options: SyncOptions = {}) {
 
     for (const { keyword: kw, index } of syncIndexes) {
       try {
-        // Fetch deeper results so ranks beyond page one are not mislabeled.
-        const results = await searchApps(kw.keyword, kw.region || 'us', 100);
-        
-        // Find our tracked app in the results
-        const appIndex = results.findIndex((app) => app.id === kw.appId);
-        const currentRank = appIndex !== -1 ? appIndex + 1 : null;
-        const previousRank = kw.currentRank;
-        
-        let rankChange = null;
-        if (currentRank !== null && previousRank !== null) {
-          rankChange = previousRank - currentRank; // positive means moved up
-        }
-
         // Fetch true popularity if Search Ads keys are available
         let truePopularity = kw.popularity;
         let popularitySource = kw.popularitySource ?? 'estimated';
@@ -103,46 +86,17 @@ export async function runBackgroundSync(options: SyncOptions = {}) {
           }
         }
 
-        const topAppsRatings = results.slice(0, 10).map((app) => app.ratingCount);
-        const difficultyScore = calculateDifficultyScore(truePopularity, topAppsRatings);
-        const difficulty = calculateDifficulty(truePopularity, topAppsRatings);
-        const competitorRanks = competitors.reduce<Record<string, number | null>>(
-          (acc, competitor) => {
-            const competitorIndex = results.findIndex((app) => app.id === competitor.id);
-            acc[competitor.id] = competitorIndex === -1 ? null : competitorIndex + 1;
-            return acc;
+        updatedKeywords[index] = await hydrateKeywordRanking(
+          {
+            ...kw,
+            popularity: truePopularity,
+            popularitySource,
           },
-          {}
+          kw.appId,
+          kw.region || 'us',
+          competitors,
+          { appendHistory: true }
         );
-
-        // Add to history
-        const newHistoryEntry = {
-          date: new Date().toISOString(),
-          rank: currentRank,
-        };
-
-        const newHistory = [...kw.rankHistory, newHistoryEntry];
-        
-        // Keep only last 30 days
-        if (newHistory.length > 30) {
-          newHistory.shift();
-        }
-
-        updatedKeywords[index] = {
-          ...kw,
-          popularity: truePopularity,
-          popularitySource,
-          difficulty,
-          difficultyScore,
-          difficultySource: 'itunes-search',
-          currentRank,
-          previousRank,
-          rankChange,
-          rankHistory: newHistory,
-          competitorRanks,
-          rankSource: 'itunes-search',
-          lastUpdated: new Date().toISOString(),
-        };
 
         // Sleep to avoid rate limiting from iTunes API
         await new Promise((resolve) => setTimeout(resolve, 500));

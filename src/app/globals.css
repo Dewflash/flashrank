@@ -934,6 +934,18 @@ textarea {
   flex: 0 0 auto;
 }
 
+.ranking-app-icon.selected {
+  box-shadow:
+    0 0 0 2px var(--color-warning),
+    inset 0 0 0 1px var(--border-color);
+}
+
+.ranking-app-icon.competitor {
+  box-shadow:
+    0 0 0 2px var(--accent-primary),
+    inset 0 0 0 1px var(--border-color);
+}
+
 .ranking-app-icon.placeholder {
   display: inline-flex;
   align-items: center;
@@ -1071,6 +1083,19 @@ textarea {
 
 .top-app-item:hover {
   background: var(--bg-surface-hover);
+}
+
+.top-app-item.selected,
+.top-app-item.competitor {
+  background: var(--bg-surface);
+}
+
+.top-app-item.selected {
+  box-shadow: inset 3px 0 0 var(--color-warning);
+}
+
+.top-app-item.competitor {
+  box-shadow: inset 3px 0 0 var(--accent-primary);
 }
 
 .top-app-rank {
@@ -1415,6 +1440,15 @@ textarea {
   object-fit: cover;
 }
 
+.competitor-app-icon.placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-gradient);
+  color: white;
+  font-weight: 700;
+}
+
 .competitor-app-info h3 {
   font-size: 16px;
   font-weight: 600;
@@ -1423,6 +1457,24 @@ textarea {
 .competitor-app-info p {
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+.comparison-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.comparison-metrics span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: var(--border-radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 /* ========================================

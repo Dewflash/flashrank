@@ -10,6 +10,7 @@ import {
   calculateDifficulty,
   calculateDifficultyScore,
 } from '@/lib/api';
+import { fetchRankingSignals, slugifyKeyword } from '@/lib/keywordHydration';
 
 export default function AddKeywordModal() {
   const {
@@ -18,6 +19,7 @@ export default function AddKeywordModal() {
     addKeyword,
     selectedAppId,
     selectedRegion,
+    apps,
     tags,
   } = useAppStore();
 
@@ -57,30 +59,48 @@ export default function AddKeywordModal() {
     return () => window.clearTimeout(timer);
   }, [fetchSuggestions, keywordInput]);
 
-  const handleAddKeyword = (keyword: string) => {
+  const handleAddKeyword = async (keyword: string) => {
     if (!selectedAppId || !keyword.trim()) return;
 
-    const popularity = calculatePopularity(keyword);
-    const difficulty = calculateDifficulty(popularity, []);
-    const difficultyScore = calculateDifficultyScore(popularity, []);
+    const normalizedKeyword = keyword.trim().toLowerCase();
+    setIsLoading(true);
+    const competitors = apps.filter(
+      (app) => app.isCompetitor && app.region === selectedRegion
+    );
+    const rankingSignals = await fetchRankingSignals(
+      normalizedKeyword,
+      selectedAppId,
+      selectedRegion,
+      competitors,
+      100
+    );
+    const popularity = calculatePopularity(normalizedKeyword);
+    const difficulty = calculateDifficulty(popularity, rankingSignals.topRatings);
+    const difficultyScore = calculateDifficultyScore(popularity, rankingSignals.topRatings);
 
     const newKeyword: TrackedKeyword = {
-      id: `kw-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      keyword: keyword.trim().toLowerCase(),
+      id: `kw-${selectedRegion}-${selectedAppId}-${slugifyKeyword(normalizedKeyword)}`,
+      keyword: normalizedKeyword,
       appId: selectedAppId,
       region: selectedRegion,
       popularity,
       difficulty,
       difficultyScore,
-      currentRank: null,
+      currentRank: rankingSignals.currentRank,
       previousRank: null,
       rankChange: null,
       tags: tags.filter((t) => selectedTags.includes(t.id)),
       note: null,
-      rankHistory: [],
-      competitorRanks: {},
+      rankHistory: [
+        {
+          date: new Date().toISOString(),
+          rank: rankingSignals.currentRank,
+        },
+      ],
+      competitorRanks: rankingSignals.competitorRanks,
+      rankingApps: rankingSignals.rankingApps,
       popularitySource: 'estimated',
-      difficultySource: 'estimated',
+      difficultySource: 'itunes-search',
       rankSource: 'itunes-search',
       lastUpdated: new Date().toISOString(),
       addedAt: new Date().toISOString(),
@@ -89,11 +109,12 @@ export default function AddKeywordModal() {
     addKeyword(newKeyword);
     setKeywordInput('');
     setSuggestions([]);
+    setIsLoading(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    handleAddKeyword(keywordInput);
+    void handleAddKeyword(keywordInput);
   };
 
   const handleClose = () => {
@@ -153,7 +174,7 @@ export default function AddKeywordModal() {
                 <div
                   key={suggestion}
                   className="search-result-item"
-                  onClick={() => handleAddKeyword(suggestion)}
+                  onClick={() => void handleAddKeyword(suggestion)}
                   style={{ padding: '8px 10px' }}
                 >
                   <Plus size={14} style={{ color: 'var(--accent-primary)' }} />
@@ -202,11 +223,11 @@ export default function AddKeywordModal() {
           </button>
           <button
             className="btn btn-primary"
-            onClick={() => handleAddKeyword(keywordInput)}
-            disabled={!keywordInput.trim()}
+            onClick={() => void handleAddKeyword(keywordInput)}
+            disabled={!keywordInput.trim() || isLoading}
           >
             <Plus size={14} />
-            Add Keyword
+            {isLoading ? 'Checking rankings...' : 'Add Keyword'}
           </button>
         </div>
       </div>

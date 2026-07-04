@@ -38,6 +38,20 @@ export interface RankHistoryEntry {
   rank: number | null;
 }
 
+export interface RankingAppSnapshot {
+  rank: number;
+  appId: string;
+  appName: string;
+  appIcon: string;
+  developer: string;
+  rating: number;
+  ratingCount: number;
+  bundleId: string;
+  url: string;
+  isSelectedApp: boolean;
+  isTrackedCompetitor: boolean;
+}
+
 export type ASODataSource =
   | 'estimated'
   | 'itunes-search'
@@ -59,6 +73,7 @@ export interface TrackedKeyword {
   note: KeywordNote | null;
   rankHistory: RankHistoryEntry[];
   competitorRanks?: Record<string, number | null>;
+  rankingApps?: RankingAppSnapshot[];
   popularitySource?: ASODataSource;
   difficultySource?: ASODataSource;
   rankSource?: ASODataSource;

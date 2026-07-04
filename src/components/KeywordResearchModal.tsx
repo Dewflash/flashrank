@@ -5,6 +5,11 @@ import { Check, Lightbulb, Loader2, Plus, Search, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import type { AppMetadata, TrackedKeyword } from '@/types';
 import {
+  buildRankingSignals,
+  slugifyKeyword,
+} from '@/lib/keywordHydration';
+import type { RankingSignals } from '@/lib/keywordHydration';
+import {
   calculateDifficulty,
   calculateDifficultyScore,
   calculatePopularity,
@@ -19,6 +24,7 @@ interface SuggestionRow {
   difficultyScore: number;
   position: number | null;
   topApps: AppMetadata[];
+  rankingSignals: RankingSignals;
 }
 
 const MAX_ROWS = 18;
@@ -61,6 +67,10 @@ export default function KeywordResearchModal() {
   } = useAppStore();
 
   const selectedApp = apps.find((app) => app.id === selectedAppId);
+  const competitors = useMemo(
+    () => apps.filter((app) => app.isCompetitor && app.region === selectedRegion),
+    [apps, selectedRegion]
+  );
   const existingKeywords = useMemo(
     () =>
       new Set(
@@ -124,6 +134,7 @@ export default function KeywordResearchModal() {
           const topRatings = results.slice(0, 10).map((app) => app.ratingCount);
           const difficultyScore = calculateDifficultyScore(popularity, topRatings);
           const positionIndex = results.findIndex((app) => app.id === selectedApp.id);
+          const rankingSignals = buildRankingSignals(results, selectedApp.id, competitors);
 
           nextRows.push({
             keyword,
@@ -132,6 +143,7 @@ export default function KeywordResearchModal() {
             difficultyScore,
             position: positionIndex === -1 ? null : positionIndex + 1,
             topApps: results.slice(0, 8),
+            rankingSignals,
           });
         }
 
@@ -144,7 +156,7 @@ export default function KeywordResearchModal() {
         setIsLoading(false);
       }
     },
-    [existingKeywords, selectedApp, selectedRegion]
+    [competitors, existingKeywords, selectedApp, selectedRegion]
   );
 
   useEffect(() => {
@@ -179,7 +191,7 @@ export default function KeywordResearchModal() {
       .filter((row) => selected.has(row.keyword))
       .forEach((row) => {
         const newKeyword: TrackedKeyword = {
-          id: `kw-${Date.now()}-${row.keyword.replace(/[^a-z0-9]+/g, '-')}`,
+          id: `kw-${selectedRegion}-${selectedAppId}-${slugifyKeyword(row.keyword)}`,
           keyword: row.keyword,
           appId: selectedAppId,
           region: selectedRegion,
@@ -188,17 +200,18 @@ export default function KeywordResearchModal() {
           difficulty: row.difficulty,
           difficultyScore: row.difficultyScore,
           difficultySource: 'itunes-search',
-          currentRank: row.position,
+          currentRank: row.rankingSignals.currentRank,
           previousRank: null,
           rankChange: null,
           rankSource: 'itunes-search',
-          competitorRanks: {},
+          competitorRanks: row.rankingSignals.competitorRanks,
+          rankingApps: row.rankingSignals.rankingApps,
           tags: genericTag ? [genericTag] : [],
           note: null,
           rankHistory: [
             {
               date: new Date().toISOString(),
-              rank: row.position,
+              rank: row.rankingSignals.currentRank,
             },
           ],
           lastUpdated: new Date().toISOString(),
