@@ -9,10 +9,17 @@ interface ContextMenuProps {
   x: number;
   y: number;
   keywordId: string;
+  selectedKeywordIds?: string[];
   onClose: () => void;
 }
 
-export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuProps) {
+export default function ContextMenu({
+  x,
+  y,
+  keywordId,
+  selectedKeywordIds = [],
+  onClose,
+}: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const {
     apps,
@@ -40,16 +47,67 @@ export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuPro
 
   if (!keyword) return null;
   const keywordRegion = keyword.region;
-  const extractableRankingApps = (keyword.rankingApps ?? []).filter(
-    (app) =>
-      app.appId !== keyword.appId &&
-      !apps.some(
-        (trackedApp) =>
-          trackedApp.id === app.appId &&
-          trackedApp.region === keywordRegion &&
-          trackedApp.isCompetitor
-      )
-  );
+  const targetIds =
+    selectedKeywordIds.includes(keywordId) && selectedKeywordIds.length > 0
+      ? selectedKeywordIds
+      : [keywordId];
+  const targetKeywords = targetIds
+    .map((id) => keywords.find((trackedKeyword) => trackedKeyword.id === id))
+    .filter(
+      (trackedKeyword): trackedKeyword is NonNullable<typeof trackedKeyword> =>
+        Boolean(trackedKeyword)
+    );
+  const selectedCount = targetKeywords.length;
+  const extractableByAppId = new Map<string, RankingAppSnapshot>();
+  targetKeywords.forEach((targetKeyword) => {
+    (targetKeyword.rankingApps ?? []).forEach((app) => {
+      if (app.appId === targetKeyword.appId) return;
+      if (
+        apps.some(
+          (trackedApp) =>
+            trackedApp.id === app.appId &&
+            trackedApp.region === targetKeyword.region &&
+            trackedApp.isCompetitor
+        )
+      ) {
+        return;
+      }
+      if (!extractableByAppId.has(app.appId)) {
+        extractableByAppId.set(app.appId, app);
+      }
+    });
+  });
+  const extractableRankingApps = Array.from(extractableByAppId.values());
+  const selectedNoun = `selected keyword${selectedCount === 1 ? '' : 's'}`;
+  const headerLabel =
+    selectedCount > 1 ? `${selectedCount} selected keywords` : keyword.keyword;
+  const hasTag = (keywordToCheck: typeof keyword, tagId: string) =>
+    keywordToCheck.tags.some((tag) => tag.id === tagId);
+  const allTargetsHaveTag = (tagId: string) =>
+    targetKeywords.length > 0 &&
+    targetKeywords.every((targetKeyword) => hasTag(targetKeyword, tagId));
+  const anyTargetHasTag = (tagId: string) =>
+    targetKeywords.some((targetKeyword) => hasTag(targetKeyword, tagId));
+  const formatKeywordDetails = () =>
+    [
+      'Keyword,Popularity,Difficulty,Position,Change,Tags',
+      ...targetKeywords.map((targetKeyword) =>
+        [
+          targetKeyword.keyword,
+          targetKeyword.popularity,
+          targetKeyword.difficultyScore,
+          targetKeyword.currentRank ?? '',
+          targetKeyword.rankChange ?? '',
+          targetKeyword.tags.map((tag) => tag.name).join('|'),
+        ]
+          .map((value) => `"${String(value).replaceAll('"', '""')}"`)
+          .join(',')
+      ),
+    ].join('\n');
+  const writeClipboard = (value: string) => {
+    void navigator.clipboard.writeText(value).catch(() => undefined);
+    onClose();
+  };
   const extractLimit = Math.min(extractableRankingApps.length, 10);
   const extractLabel =
     extractLimit > 0
@@ -61,12 +119,21 @@ export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuPro
   const adjustedY = Math.min(y, window.innerHeight - 300);
 
   const handleCopyKeyword = () => {
-    navigator.clipboard.writeText(keyword.keyword);
-    onClose();
+    writeClipboard(targetKeywords.map((targetKeyword) => targetKeyword.keyword).join('\n'));
+  };
+
+  const handleCopyKeywordDetails = () => {
+    writeClipboard(formatKeywordDetails());
   };
 
   const handleDelete = () => {
-    removeKeyword(keywordId);
+    if (
+      selectedCount > 1 &&
+      !window.confirm(`Delete ${selectedCount} selected keywords?`)
+    ) {
+      return;
+    }
+    targetKeywords.forEach((targetKeyword) => removeKeyword(targetKeyword.id));
     onClose();
   };
 
@@ -77,18 +144,20 @@ export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuPro
   };
 
   const handleToggleTag = (tagId: string) => {
-    const currentTags = keyword.tags;
     const tag = tags.find((t) => t.id === tagId);
     if (!tag) return;
 
-    if (currentTags.some((t) => t.id === tagId)) {
-      updateKeywordTags(
-        keywordId,
-        currentTags.filter((t) => t.id !== tagId)
-      );
-    } else {
-      updateKeywordTags(keywordId, [...currentTags, tag]);
-    }
+    targetKeywords.forEach((targetKeyword) => {
+      const currentTags = targetKeyword.tags;
+      if (allTargetsHaveTag(tagId)) {
+        updateKeywordTags(
+          targetKeyword.id,
+          currentTags.filter((t) => t.id !== tagId)
+        );
+      } else if (!currentTags.some((t) => t.id === tagId)) {
+        updateKeywordTags(targetKeyword.id, [...currentTags, tag]);
+      }
+    });
   };
 
   const handleSearchAppStore = () => {
@@ -151,17 +220,31 @@ export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuPro
           marginBottom: '4px',
         }}
       >
-        {keyword.keyword}
+        {headerLabel}
       </div>
 
-      <MenuItem icon={<StickyNote size={14} />} label="View Details" onClick={handleViewDetails} />
+      <MenuItem
+        icon={<StickyNote size={14} />}
+        label="View Details"
+        onClick={handleViewDetails}
+        disabled={selectedCount !== 1}
+      />
       <MenuItem
         icon={<Users size={14} />}
         label={extractLabel}
         onClick={handleExtractCompetitors}
         disabled={extractableRankingApps.length === 0}
       />
-      <MenuItem icon={<Copy size={14} />} label="Copy Keyword" onClick={handleCopyKeyword} />
+      <MenuItem
+        icon={<Copy size={14} />}
+        label={`Copy ${selectedNoun}`}
+        onClick={handleCopyKeyword}
+      />
+      <MenuItem
+        icon={<Copy size={14} />}
+        label={`Copy ${selectedNoun} with details`}
+        onClick={handleCopyKeywordDetails}
+      />
       <MenuItem icon={<ExternalLink size={14} />} label="Search App Store" onClick={handleSearchAppStore} />
 
       {/* Tags submenu */}
@@ -184,7 +267,8 @@ export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuPro
         Tags
       </div>
       {tags.map((tag) => {
-        const isActive = keyword.tags.some((t) => t.id === tag.id);
+        const isActive = allTargetsHaveTag(tag.id);
+        const isMixed = !isActive && anyTargetHasTag(tag.id);
         return (
           <div
             key={tag.id}
@@ -198,7 +282,7 @@ export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuPro
               gap: '8px',
               padding: '6px 10px',
               fontSize: '13px',
-              color: isActive ? tag.color : 'var(--text-secondary)',
+              color: isActive || isMixed ? tag.color : 'var(--text-secondary)',
               cursor: 'pointer',
               borderRadius: '4px',
               transition: 'background 100ms',
@@ -215,7 +299,11 @@ export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuPro
                 width: '10px',
                 height: '10px',
                 borderRadius: '3px',
-                background: isActive ? tag.color : 'transparent',
+                background: isActive
+                  ? tag.color
+                  : isMixed
+                    ? `${tag.color}66`
+                    : 'transparent',
                 border: `2px solid ${tag.color}`,
               }}
             />
@@ -232,7 +320,7 @@ export default function ContextMenu({ x, y, keywordId, onClose }: ContextMenuPro
       />
       <MenuItem
         icon={<Trash2 size={14} />}
-        label="Delete Keyword"
+        label={`Delete ${selectedNoun}`}
         onClick={handleDelete}
         danger
       />

@@ -108,6 +108,7 @@ export default function KeywordTable() {
     y: number;
     keywordId: string;
   } | null>(null);
+  const [selectedBulkKeywordIds, setSelectedBulkKeywordIds] = useState<Set<string>>(new Set());
   const [now, setNow] = useState<number | null>(null);
   const [autoHydrateKey, setAutoHydrateKey] = useState<string | null>(null);
   const currentImportProgress = appImportProgress[appScopeKey(selectedAppId, selectedRegion)];
@@ -121,6 +122,10 @@ export default function KeywordTable() {
 
   const handleContextMenu = (e: React.MouseEvent, keywordId: string) => {
     e.preventDefault();
+    setSelectedBulkKeywordIds((current) => {
+      if (current.has(keywordId)) return current;
+      return new Set([keywordId]);
+    });
     setContextMenu({ x: e.clientX, y: e.clientY, keywordId });
   };
 
@@ -187,6 +192,19 @@ export default function KeywordTable() {
         return 0;
     }
   });
+  const sortedIds = sorted.map((keyword) => keyword.id);
+  const selectedVisibleCount = sortedIds.filter((id) => selectedBulkKeywordIds.has(id)).length;
+  const allVisibleSelected = sorted.length > 0 && selectedVisibleCount === sorted.length;
+
+  useEffect(() => {
+    setSelectedBulkKeywordIds((current) => {
+      if (current.size === 0) return current;
+      const visibleIds = new Set(sortedIds);
+      const next = new Set([...current].filter((id) => visibleIds.has(id)));
+      if (next.size === current.size) return current;
+      return next;
+    });
+  }, [sortedIds]);
 
   const handleSort = (field: SortField) => {
     if (sort.field === field) {
@@ -196,7 +214,34 @@ export default function KeywordTable() {
     }
   };
 
-  const handleRowClick = (keyword: TrackedKeyword) => {
+  const handleToggleKeywordSelection = (keywordId: string) => {
+    setSelectedBulkKeywordIds((current) => {
+      const next = new Set(current);
+      if (next.has(keywordId)) {
+        next.delete(keywordId);
+      } else {
+        next.add(keywordId);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleVisibleSelection = () => {
+    setSelectedBulkKeywordIds((current) => {
+      if (allVisibleSelected) {
+        const next = new Set(current);
+        sortedIds.forEach((id) => next.delete(id));
+        return next;
+      }
+      return new Set([...current, ...sortedIds]);
+    });
+  };
+
+  const handleRowClick = (event: React.MouseEvent, keyword: TrackedKeyword) => {
+    if (event.metaKey || event.ctrlKey) {
+      handleToggleKeywordSelection(keyword.id);
+      return;
+    }
     setSelectedKeyword(keyword.id);
     setDetailPanelOpen(true);
   };
@@ -361,6 +406,15 @@ export default function KeywordTable() {
       <table className="data-table">
         <thead>
           <tr>
+            <th style={{ width: '44px' }} onClick={(event) => event.stopPropagation()}>
+              <input
+                type="checkbox"
+                className="keyword-select-checkbox"
+                checked={allVisibleSelected}
+                aria-label="Select visible keywords"
+                onChange={handleToggleVisibleSelection}
+              />
+            </th>
             <th
               className={sort.field === 'keyword' ? 'sorted' : ''}
               onClick={() => handleSort('keyword')}
@@ -433,10 +487,19 @@ export default function KeywordTable() {
             return (
               <tr
                 key={kw.id}
-                className={selectedKeywordId === kw.id ? 'selected' : ''}
-                onClick={() => handleRowClick(kw)}
+                className={`${selectedKeywordId === kw.id ? 'selected' : ''} ${selectedBulkKeywordIds.has(kw.id) ? 'bulk-selected' : ''}`}
+                onClick={(event) => handleRowClick(event, kw)}
                 onContextMenu={(e) => handleContextMenu(e, kw.id)}
               >
+              <td onClick={(event) => event.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  className="keyword-select-checkbox"
+                  checked={selectedBulkKeywordIds.has(kw.id)}
+                  aria-label={`Select ${kw.keyword}`}
+                  onChange={() => handleToggleKeywordSelection(kw.id)}
+                />
+              </td>
               <td>
                 <div className="keyword-cell">
                   <TranslatableKeyword keyword={kw.keyword} />
@@ -568,6 +631,7 @@ export default function KeywordTable() {
           x={contextMenu.x}
           y={contextMenu.y}
           keywordId={contextMenu.keywordId}
+          selectedKeywordIds={[...selectedBulkKeywordIds]}
           onClose={() => setContextMenu(null)}
         />
       )}

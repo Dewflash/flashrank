@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { X, Plus, Sparkles } from 'lucide-react';
+import React, { useState, useCallback, useRef } from 'react';
+import { X, Plus, Sparkles, Upload } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { TrackedKeyword } from '@/types';
 import {
@@ -17,6 +17,45 @@ import {
   slugifyKeyword,
 } from '@/lib/keywordHydration';
 
+function cleanKeywordValue(value: string): string {
+  return value
+    .replace(/^\s*[-*•\d.)]+\s*/, '')
+    .trim()
+    .toLowerCase();
+}
+
+function collectJsonKeywords(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(collectJsonKeywords);
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const directValue =
+      record.keyword ?? record.term ?? record.name ?? record.text ?? record.value;
+    if (typeof directValue === 'string') return [directValue];
+    return Object.values(record).flatMap(collectJsonKeywords);
+  }
+  return [];
+}
+
+function parseKeywordInput(value: string): string[] {
+  const trimmed = value.trim();
+  const rawValues = (() => {
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        return collectJsonKeywords(JSON.parse(trimmed));
+      } catch {
+        return [];
+      }
+    }
+
+    return value.split(/[,\n;]/g);
+  })();
+
+  return rawValues
+    .map(cleanKeywordValue)
+    .filter((keyword, index, arr) => keyword.length > 0 && arr.indexOf(keyword) === index);
+}
+
 export default function AddKeywordModal() {
   const {
     isAddKeywordModalOpen,
@@ -29,6 +68,7 @@ export default function AddKeywordModal() {
     tags,
   } = useAppStore();
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [keywordInput, setKeywordInput] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -52,17 +92,13 @@ export default function AddKeywordModal() {
   );
 
   const keywordTerms = React.useMemo(
-    () =>
-      keywordInput
-        .split(/[,\n]/g)
-        .map((value) => value.trim().toLowerCase())
-        .filter((value, index, arr) => value.length > 0 && arr.indexOf(value) === index),
+    () => parseKeywordInput(keywordInput),
     [keywordInput]
   );
 
   const fetchSuggestions = useCallback(
     async (term: string) => {
-      if (term.length < 2 || /[,\n]/.test(term)) {
+      if (term.length < 2 || /[,\n;{}\[\]"]/.test(term)) {
         setSuggestions([]);
         return;
       }
@@ -195,6 +231,21 @@ export default function AddKeywordModal() {
     void handleAddKeywords(keywordTerms);
   };
 
+  const handleImportFile = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setKeywordInput(text);
+      setSuggestions([]);
+      setError(null);
+      setProgressText(`Imported ${parseKeywordInput(text).length} keyword${parseKeywordInput(text).length === 1 ? '' : 's'} from ${file.name}.`);
+    } catch {
+      setError(`Could not import ${file.name}.`);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleClose = () => {
     setAddKeywordModalOpen(false);
     setKeywordInput('');
@@ -219,15 +270,38 @@ export default function AddKeywordModal() {
         <div className="modal-body">
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-label">Keyword</label>
-              <input
-                type="text"
+              <div className="form-label-row">
+                <label className="form-label">Keywords</label>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading}
+                >
+                  <Upload size={13} />
+                  Import JSON/Text
+                </button>
+              </div>
+              <textarea
                 className="form-input"
-                placeholder="Enter one or more keywords, separated by commas..."
+                rows={5}
+                placeholder={'Paste keywords, one per line, comma-separated, or JSON like ["daily prayer", {"keyword":"bible study"}]'}
                 value={keywordInput}
                 onChange={(e) => setKeywordInput(e.target.value)}
                 autoFocus
               />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,.txt,text/plain,application/json"
+                hidden
+                onChange={(event) => void handleImportFile(event.target.files?.[0] ?? null)}
+              />
+              <div className="keyword-import-summary">
+                {keywordTerms.length > 0
+                  ? `${keywordTerms.length} keyword${keywordTerms.length === 1 ? '' : 's'} ready to check`
+                  : 'No keywords parsed yet'}
+              </div>
             </div>
           </form>
 

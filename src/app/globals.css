@@ -712,8 +712,23 @@ textarea {
   background: rgba(99, 102, 241, 0.08);
 }
 
+.data-table tbody tr.bulk-selected {
+  background: rgba(0, 122, 255, 0.08);
+}
+
+.data-table tbody tr.selected.bulk-selected {
+  background: rgba(99, 102, 241, 0.13);
+}
+
 .data-table tbody tr:active {
   background: var(--bg-surface-active);
+}
+
+.keyword-select-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
 }
 
 /* Keyword cell */
@@ -1294,6 +1309,24 @@ textarea {
   letter-spacing: 0.05em;
 }
 
+.form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: 6px;
+}
+
+.form-label-row .form-label {
+  margin-bottom: 0;
+}
+
+.btn-sm {
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
 .form-input {
   width: 100%;
   padding: 10px 12px;
@@ -1314,6 +1347,18 @@ textarea {
 
 .form-input::placeholder {
   color: var(--text-tertiary);
+}
+
+textarea.form-input {
+  min-height: 112px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.keyword-import-summary {
+  margin-top: 6px;
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 /* Search results in modal */
