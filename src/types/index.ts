@@ -60,6 +60,9 @@ export type ASODataSource =
   | 'apple-search-ads'
   | 'app-store-connect';
 
+export type RankStatus = 'ranked' | 'unranked' | 'pending' | 'error';
+export type RankStatusFilter = 'all' | RankStatus;
+
 export interface TrackedKeyword {
   id: string;
   keyword: string;
@@ -80,6 +83,8 @@ export interface TrackedKeyword {
   popularitySource?: ASODataSource;
   difficultySource?: ASODataSource;
   rankSource?: ASODataSource;
+  rankStatus?: RankStatus;
+  rankStatusMessage?: string;
   lastUpdated: string;
   addedAt: string;
 }
@@ -124,6 +129,7 @@ export interface FilterState {
   tags: string[];
   difficulty: ('low' | 'medium' | 'high')[];
   rankRange: [number | null, number | null];
+  rankStatus: RankStatusFilter;
 }
 
 export type ViewMode = 'keywords' | 'competitors' | 'overview' | 'ratings';

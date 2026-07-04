@@ -17,6 +17,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { searchApps } from '@/lib/api';
 import {
   buildRankingSignals,
+  describeRankStatus,
   PUBLIC_RANKING_RESULT_LIMIT,
 } from '@/lib/keywordHydration';
 import type { RankingAppSnapshot } from '@/types';
@@ -114,6 +115,20 @@ export default function DetailPanel() {
 
   // Invert rank for visual (lower rank number = higher on chart)
   const maxRank = Math.max(...chartData.map((d) => d.rank || 0), 50);
+  const rankStatus = keyword.rankStatus
+    ? {
+        rankStatus: keyword.rankStatus,
+        rankStatusMessage:
+          keyword.rankStatusMessage ??
+          describeRankStatus({
+            currentRank: keyword.currentRank,
+            rankingResultCount: keyword.rankingResultCount,
+          }).rankStatusMessage,
+      }
+    : describeRankStatus({
+        currentRank: keyword.currentRank,
+        rankingResultCount: keyword.rankingResultCount,
+      });
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -194,8 +209,14 @@ export default function DetailPanel() {
           </div>
           <div className="stat-card">
             <div className="stat-label">Current Rank</div>
-            <div className="stat-value">
-              {keyword.currentRank ? `#${keyword.currentRank}` : '—'}
+            <div className="stat-value" title={rankStatus.rankStatusMessage}>
+              {keyword.currentRank
+                ? `#${keyword.currentRank}`
+                : rankStatus.rankStatus === 'pending'
+                  ? 'Pending'
+                  : rankStatus.rankStatus === 'error'
+                    ? 'Error'
+                    : 'Top 200+'}
             </div>
           </div>
           <div className="stat-card">

@@ -5,12 +5,14 @@ import { Search, Plus, Download, RefreshCw, Lightbulb, Trash2 } from 'lucide-rea
 import { useAppStore } from '@/store/useAppStore';
 import RegionSelector from '@/components/RegionSelector';
 import { runBackgroundSync } from '@/lib/syncEngine';
+import type { RankStatusFilter } from '@/types';
 
 export default function HeaderBar() {
   const {
     viewMode,
     filter,
     setSearchFilter,
+    setRankStatusFilter,
     keywords,
     selectedAppId,
     selectedRegion,
@@ -29,11 +31,21 @@ export default function HeaderBar() {
 
   const handleExport = () => {
     const appKeywords = keywords.filter((k) => k.appId === selectedAppId && k.region === selectedRegion);
-    const csvHeader = 'Keyword,Popularity,Difficulty,Rank,Change,Tags\n';
+    const csvHeader = 'Keyword,Popularity,Difficulty,Rank,Rank Status,Rank Status Message,Change,Tags\n';
+    const csvCell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
     const csvRows = appKeywords
       .map(
         (k) =>
-          `"${k.keyword}",${k.popularity},${k.difficulty},${k.currentRank ?? 'N/A'},${k.rankChange ?? 0},"${k.tags.map((t) => t.name).join(', ')}"`
+          [
+            csvCell(k.keyword),
+            k.popularity,
+            k.difficulty,
+            k.currentRank ?? 'N/A',
+            k.rankStatus ?? 'unknown',
+            csvCell(k.rankStatusMessage ?? ''),
+            k.rankChange ?? 0,
+            csvCell(k.tags.map((t) => t.name).join(', ')),
+          ].join(',')
       )
       .join('\n');
     const csv = csvHeader + csvRows;
@@ -99,6 +111,19 @@ export default function HeaderBar() {
                 onChange={(e) => setSearchFilter(e.target.value)}
               />
             </div>
+            <select
+              className="rank-filter-select"
+              value={filter.rankStatus}
+              onChange={(event) => setRankStatusFilter(event.target.value as RankStatusFilter)}
+              aria-label="Filter by ranking status"
+              title="Filter by ranking status"
+            >
+              <option value="all">All ranks</option>
+              <option value="ranked">Ranked</option>
+              <option value="unranked">Unranked</option>
+              <option value="pending">Pending</option>
+              <option value="error">Errors</option>
+            </select>
             <RegionSelector value={selectedRegion} onChange={setSelectedRegion} />
             <button
               className="btn btn-secondary btn-icon tooltip"

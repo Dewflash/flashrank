@@ -17,6 +17,7 @@ import { appScopeKey, useAppStore } from '@/store/useAppStore';
 import type { RankingAppSnapshot, TrackedKeyword, SortField } from '@/types';
 import ContextMenu from '@/components/ContextMenu';
 import { runBackgroundSync } from '@/lib/syncEngine';
+import { describeRankStatus } from '@/lib/keywordHydration';
 
 type TranslationState =
   | { status: 'idle'; text: null }
@@ -86,6 +87,25 @@ function TranslatableKeyword({ keyword }: { keyword: string }) {
   );
 }
 
+function keywordRankStatus(keyword: TrackedKeyword) {
+  if (keyword.rankStatus) {
+    return {
+      rankStatus: keyword.rankStatus,
+      rankStatusMessage:
+        keyword.rankStatusMessage ??
+        describeRankStatus({
+          currentRank: keyword.currentRank,
+          rankingResultCount: keyword.rankingResultCount,
+        }).rankStatusMessage,
+    };
+  }
+
+  return describeRankStatus({
+    currentRank: keyword.currentRank,
+    rankingResultCount: keyword.rankingResultCount,
+  });
+}
+
 export default function KeywordTable() {
   const {
     keywords,
@@ -142,6 +162,9 @@ export default function KeywordTable() {
     }
     if (filter.difficulty.length > 0) {
       if (!filter.difficulty.includes(k.difficulty)) return false;
+    }
+    if (filter.rankStatus !== 'all' && keywordRankStatus(k).rankStatus !== filter.rankStatus) {
+      return false;
     }
     return true;
   });
@@ -483,6 +506,7 @@ export default function KeywordTable() {
             const rankedApps = rankedAppsForKeyword(kw);
             const visibleRankingApps = rankedApps.apps.slice(0, 6);
             const hiddenRankingAppCount = Math.max(0, rankedApps.total - visibleRankingApps.length);
+            const status = keywordRankStatus(kw);
 
             return (
               <tr
@@ -560,13 +584,24 @@ export default function KeywordTable() {
                 </span>
               </td>
               <td>
-                <div className="rank-cell">
+                <div className="rank-cell" title={status.rankStatusMessage}>
                   {kw.currentRank ? (
-                    <span className={`rank-value ${kw.currentRank <= 3 ? `rank-${kw.currentRank}` : ''}`}>
-                      #{kw.currentRank}
-                    </span>
+                    <>
+                      <span className={`rank-value ${kw.currentRank <= 3 ? `rank-${kw.currentRank}` : ''}`}>
+                        #{kw.currentRank}
+                      </span>
+                      {status.rankStatus === 'error' && (
+                        <span className="rank-status-pill error">Stale</span>
+                      )}
+                    </>
                   ) : (
-                    <span className="rank-value unranked">—</span>
+                    <span className={`rank-status-pill ${status.rankStatus}`}>
+                      {status.rankStatus === 'pending'
+                        ? 'Pending'
+                        : status.rankStatus === 'error'
+                          ? 'Error'
+                          : 'Top 200'}
+                    </span>
                   )}
                 </div>
               </td>

@@ -6,6 +6,7 @@ import { useAppStore } from '@/store/useAppStore';
 import type { AppMetadata, TrackedKeyword } from '@/types';
 import {
   buildRankingSignals,
+  describeRankStatus,
   PUBLIC_RANKING_RESULT_LIMIT,
   slugifyKeyword,
 } from '@/lib/keywordHydration';
@@ -314,6 +315,11 @@ export default function KeywordResearchModal() {
     rows
       .filter((row) => selected.has(row.keyword))
       .forEach((row) => {
+        const rankStatus = describeRankStatus({
+          currentRank: row.rankingSignals.currentRank,
+          rankingResultCount: row.rankingSignals.rankingResultCount,
+          sourceStatus: row.rankingSignals.sourceStatus,
+        });
         const newKeyword: TrackedKeyword = {
           id: `kw-${selectedRegion}-${selectedAppId}-${slugifyKeyword(row.keyword)}`,
           keyword: row.keyword,
@@ -331,6 +337,7 @@ export default function KeywordResearchModal() {
           competitorRanks: row.rankingSignals.competitorRanks,
           rankingApps: row.rankingSignals.rankingApps,
           rankingResultCount: row.rankingSignals.rankingResultCount,
+          ...rankStatus,
           tags: genericTag ? [genericTag] : [],
           note: null,
           rankHistory: [

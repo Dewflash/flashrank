@@ -11,9 +11,11 @@ import {
   SyncProgress,
   AppImportProgress,
   ViewMode,
+  FilterState,
+  RankStatusFilter,
 } from '@/types';
 import { legacyDemoAppIds, seedTags } from '@/data/seedData';
-import { isBlockedKeyword, slugifyKeyword } from '@/lib/keywordHydration';
+import { describeRankStatus, isBlockedKeyword, slugifyKeyword } from '@/lib/keywordHydration';
 
 // ─── Action types ───────────────────────────────────────────────────────────
 
@@ -43,6 +45,7 @@ interface AppActions {
   setSort: (field: SortField, direction: SortDirection) => void;
   setSearchFilter: (search: string) => void;
   setTagFilter: (tags: string[]) => void;
+  setRankStatusFilter: (status: RankStatusFilter) => void;
 
   // UI state
   toggleSidebar: () => void;
@@ -64,6 +67,29 @@ interface AppActions {
 
 // ─── Store ──────────────────────────────────────────────────────────────────
 
+function defaultFilter(overrides: Partial<FilterState> = {}): FilterState {
+  return {
+    search: '',
+    tags: [],
+    difficulty: [],
+    rankRange: [null, null],
+    rankStatus: 'all',
+    ...overrides,
+  };
+}
+
+function normalizeFilter(filter: Partial<FilterState> | undefined): FilterState {
+  const normalized = defaultFilter(filter ?? {});
+  return {
+    ...normalized,
+    search: normalized.search ?? '',
+    tags: normalized.tags ?? [],
+    difficulty: normalized.difficulty ?? [],
+    rankRange: normalized.rankRange ?? [null, null],
+    rankStatus: normalized.rankStatus ?? 'all',
+  };
+}
+
 function sanitizeKeywords(keywords: TrackedKeyword[] | undefined): TrackedKeyword[] {
   if (!Array.isArray(keywords)) return [];
 
@@ -74,8 +100,21 @@ function sanitizeKeywords(keywords: TrackedKeyword[] | undefined): TrackedKeywor
 
     const identity = `${keyword.region}:${keyword.appId}:${normalized}`;
     const existing = byIdentity.get(identity);
+    const rankStatus = keyword.rankStatus
+      ? {
+          rankStatus: keyword.rankStatus,
+          rankStatusMessage: keyword.rankStatusMessage,
+        }
+      : describeRankStatus({
+          currentRank: keyword.currentRank,
+          rankingResultCount: keyword.rankingResultCount,
+        });
+    const normalizedKeyword = {
+      ...keyword,
+      ...rankStatus,
+    };
     if (!existing || new Date(keyword.lastUpdated).getTime() > new Date(existing.lastUpdated).getTime()) {
-      byIdentity.set(identity, keyword);
+      byIdentity.set(identity, normalizedKeyword);
     }
   });
 
@@ -119,7 +158,7 @@ export const useAppStore = create<AppState & AppActions>()(
       selectedKeywordId: null,
       viewMode: 'keywords',
       sort: { field: 'popularity', direction: 'desc' },
-      filter: { search: '', tags: [], difficulty: [], rankRange: [null, null] },
+      filter: defaultFilter(),
       isSidebarCollapsed: false,
       isAddKeywordModalOpen: false,
       isKeywordResearchModalOpen: false,
@@ -150,18 +189,17 @@ export const useAppStore = create<AppState & AppActions>()(
   // ── App management ─────────────────────────────────────────
 
   setSelectedApp: (appId) =>
-    set((state) => ({
+    set({
       selectedAppId: appId,
       selectedKeywordId: null, // reset keyword selection on app switch
       isDetailPanelOpen: false,
-      filter: {
-        ...state.filter,
+      filter: defaultFilter({
         search: '',
         tags: [],
         difficulty: [],
         rankRange: [null, null],
-      },
-    })),
+      }),
+    }),
 
   setSelectedRegion: (region) =>
     set((state) => {
@@ -169,13 +207,12 @@ export const useAppStore = create<AppState & AppActions>()(
       if (!selectedAppId || state.selectedRegion === region) {
         return {
           selectedRegion: region,
-          filter: {
-            ...state.filter,
+          filter: defaultFilter({
             search: '',
             tags: [],
             difficulty: [],
             rankRange: [null, null],
-          },
+          }),
         };
       }
 
@@ -202,6 +239,8 @@ export const useAppStore = create<AppState & AppActions>()(
         competitorRanks: {},
         rankingApps: [],
         rankingResultCount: 0,
+        rankStatus: 'pending' as const,
+        rankStatusMessage: `Pending refresh in ${region.toUpperCase()}. Run refresh to check public App Store rankings for this storefront.`,
         lastUpdated: now,
         addedAt: now,
       }));
@@ -216,13 +255,12 @@ export const useAppStore = create<AppState & AppActions>()(
         keywords: [...state.keywords, ...carriedKeywords],
         selectedKeywordId: carriedSelectedKeyword?.id ?? null,
         isDetailPanelOpen: carriedSelectedKeyword ? state.isDetailPanelOpen : false,
-        filter: {
-          ...state.filter,
+        filter: defaultFilter({
           search: '',
           tags: [],
           difficulty: [],
           rankRange: [null, null],
-        },
+        }),
       };
     }),
 
@@ -384,6 +422,9 @@ export const useAppStore = create<AppState & AppActions>()(
   setTagFilter: (tags) =>
     set((state) => ({ filter: { ...state.filter, tags } })),
 
+  setRankStatusFilter: (rankStatus) =>
+    set((state) => ({ filter: { ...state.filter, rankStatus } })),
+
   // ── UI state ───────────────────────────────────────────────
 
   toggleSidebar: () =>
@@ -472,6 +513,14 @@ export const useAppStore = create<AppState & AppActions>()(
         return false;
       }
 
+      if (filter.rankStatus !== 'all') {
+        const status = kw.rankStatus ?? describeRankStatus({
+          currentRank: kw.currentRank,
+          rankingResultCount: kw.rankingResultCount,
+        }).rankStatus;
+        if (status !== filter.rankStatus) return false;
+      }
+
       // Rank range filter
       const [minRank, maxRank] = filter.rankRange;
       if (kw.currentRank !== null) {
@@ -520,7 +569,7 @@ export const useAppStore = create<AppState & AppActions>()(
 }),
 {
   name: 'flashrank-storage', // key in localStorage
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState) => {
         const state = removeBundledDemoData(persistedState as Partial<AppState>);
@@ -528,6 +577,7 @@ export const useAppStore = create<AppState & AppActions>()(
           ...state,
           appImportProgress: state.appImportProgress ?? {},
           addAppMode: state.addAppMode ?? 'mine',
+          filter: normalizeFilter(state.filter),
           keywords: sanitizeKeywords(state.keywords),
         };
       },

@@ -1,6 +1,7 @@
 import type {
   AppMetadata,
   KeywordTag,
+  RankStatus,
   RankingAppSnapshot,
   TrackedApp,
   TrackedKeyword,
@@ -116,6 +117,45 @@ export function buildRankingSignals(
   };
 }
 
+export function describeRankStatus({
+  currentRank,
+  rankingResultCount,
+  sourceStatus = 'ok',
+  limit = PUBLIC_RANKING_RESULT_LIMIT,
+}: {
+  currentRank: number | null;
+  rankingResultCount?: number;
+  sourceStatus?: RankingSignals['sourceStatus'];
+  limit?: number;
+}): { rankStatus: RankStatus; rankStatusMessage: string } {
+  if (sourceStatus === 'error') {
+    return {
+      rankStatus: 'error',
+      rankStatusMessage: 'Latest public App Store ranking check failed. Previous data was preserved.',
+    };
+  }
+
+  if (currentRank !== null) {
+    return {
+      rankStatus: 'ranked',
+      rankStatusMessage: `Your app ranked #${currentRank} in the public App Store search results checked.`,
+    };
+  }
+
+  const checkedCount = Math.max(0, rankingResultCount ?? 0);
+  if (checkedCount === 0) {
+    return {
+      rankStatus: 'unranked',
+      rankStatusMessage: 'Apple returned no public search results for this keyword in the selected storefront.',
+    };
+  }
+
+  return {
+    rankStatus: 'unranked',
+    rankStatusMessage: `Your app was not found in the top ${Math.min(checkedCount, limit)} public App Store search results checked.`,
+  };
+}
+
 export async function fetchRankingSignals(
   keyword: string,
   selectedAppId: string,
@@ -191,6 +231,11 @@ export async function hydrateKeywordRanking(
     : keyword.rankHistory.length > 0
       ? keyword.rankHistory
       : [historyEntry];
+  const rankStatus = describeRankStatus({
+    currentRank: signals.currentRank,
+    rankingResultCount: signals.rankingResultCount,
+    sourceStatus: signals.sourceStatus,
+  });
 
   return {
     ...keyword,
@@ -206,6 +251,7 @@ export async function hydrateKeywordRanking(
     rankingResultCount: signals.rankingResultCount,
     rankHistory,
     rankSource: 'itunes-search',
+    ...rankStatus,
     lastUpdated: new Date().toISOString(),
   };
 }
@@ -254,6 +300,11 @@ export async function buildStarterKeywordsForApp({
     const difficultyScore = calculateDifficultyScore(popularity, signals.topRatings);
     const firstNameToken = normalizeTerm(app.name).split(/\s+/)[0];
     const isBrandTerm = firstNameToken.length > 0 && keyword.includes(firstNameToken);
+    const rankStatus = describeRankStatus({
+      currentRank: signals.currentRank,
+      rankingResultCount: signals.rankingResultCount,
+      sourceStatus: signals.sourceStatus,
+    });
 
     starterKeywords.push({
       id: `kw-${region}-${app.id}-${slugifyKeyword(keyword)}`,
@@ -272,6 +323,7 @@ export async function buildStarterKeywordsForApp({
       competitorRanks: signals.competitorRanks,
       rankingApps: signals.rankingApps,
       rankingResultCount: signals.rankingResultCount,
+      ...rankStatus,
       tags: isBrandTerm && brandTag ? [brandTag] : genericTag ? [genericTag] : [],
       note: null,
       rankHistory: [

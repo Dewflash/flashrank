@@ -562,6 +562,24 @@ textarea {
   pointer-events: none;
 }
 
+.rank-filter-select {
+  min-width: 118px;
+  height: 36px;
+  padding: 0 30px 0 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: var(--font-family);
+  outline: none;
+}
+
+.rank-filter-select:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.1);
+}
+
 /* Buttons */
 .btn {
   display: inline-flex;
@@ -909,6 +927,34 @@ textarea {
 .rank-value.unranked {
   color: var(--text-tertiary);
   font-size: 12px;
+}
+
+.rank-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rank-status-pill.unranked {
+  background: var(--bg-surface);
+  color: var(--text-tertiary);
+}
+
+.rank-status-pill.pending {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.rank-status-pill.error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
 }
 
 .rank-value.rank-1 {
@@ -2235,6 +2281,11 @@ textarea.form-input {
   .search-container {
     flex: 1 1 100%;
     width: 100%;
+  }
+
+  .rank-filter-select {
+    flex: 1 1 132px;
+    min-width: 0;
   }
 
   .region-select {

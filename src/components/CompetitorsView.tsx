@@ -11,6 +11,7 @@ import {
   getKeywordSuggestions,
 } from '@/lib/api';
 import {
+  describeRankStatus,
   fetchRankingSignals,
   hydrateKeywordRanking,
   PUBLIC_RANKING_RESULT_LIMIT,
@@ -358,6 +359,11 @@ export default function CompetitorsView() {
 
       const extracted: TrackedKeyword[] = selectedOpportunities.map((opportunity) => {
         const keywordSlug = slugifyKeyword(opportunity.keyword);
+        const rankStatus = describeRankStatus({
+          currentRank: opportunity.signals.currentRank,
+          rankingResultCount: opportunity.signals.rankingResultCount,
+          sourceStatus: opportunity.signals.sourceStatus,
+        });
 
         return {
           id: `kw-${selectedRegion}-${selectedAppId}-${competitor.id}-${keywordSlug}`,
@@ -376,6 +382,7 @@ export default function CompetitorsView() {
           competitorRanks: opportunity.signals.competitorRanks,
           rankingApps: opportunity.signals.rankingApps,
           rankingResultCount: opportunity.signals.rankingResultCount,
+          ...rankStatus,
           tags: competitorTag ? [competitorTag] : [],
           note: null,
           rankHistory: [

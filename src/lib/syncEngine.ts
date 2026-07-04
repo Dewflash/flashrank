@@ -1,5 +1,5 @@
 import { useAppStore } from '@/store/useAppStore';
-import { hydrateKeywordRanking } from '@/lib/keywordHydration';
+import { describeRankStatus, hydrateKeywordRanking } from '@/lib/keywordHydration';
 import { isProviderReady } from '@/lib/credentials';
 
 /**
@@ -145,6 +145,14 @@ export async function runBackgroundSync(options: SyncOptions = {}) {
       } catch (e) {
         failedCount += 1;
         console.error(`Failed to sync keyword: ${kw.keyword}`, e);
+        updatedKeywords[index] = {
+          ...kw,
+          ...describeRankStatus({
+            currentRank: kw.currentRank,
+            rankingResultCount: kw.rankingResultCount,
+            sourceStatus: 'error',
+          }),
+        };
         setSyncProgress({
           status: 'running',
           total: syncIndexes.length,

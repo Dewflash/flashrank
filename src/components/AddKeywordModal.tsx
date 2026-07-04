@@ -12,6 +12,7 @@ import {
 } from '@/lib/api';
 import { ALL_TIME_POPULAR_KEYWORDS } from '@/lib/keywordSeeds';
 import {
+  describeRankStatus,
   fetchRankingSignals,
   PUBLIC_RANKING_RESULT_LIMIT,
   slugifyKeyword,
@@ -163,6 +164,11 @@ export default function AddKeywordModal() {
       const popularity = calculatePopularity(normalizedKeyword);
       const difficulty = calculateDifficulty(popularity, rankingSignals.topRatings);
       const difficultyScore = calculateDifficultyScore(popularity, rankingSignals.topRatings);
+      const rankStatus = describeRankStatus({
+        currentRank: rankingSignals.currentRank,
+        rankingResultCount: rankingSignals.rankingResultCount,
+        sourceStatus: rankingSignals.sourceStatus,
+      });
 
       const newKeyword: TrackedKeyword = {
         id: `kw-${selectedRegion}-${selectedAppId}-${slugifyKeyword(normalizedKeyword)}`,
@@ -186,6 +192,7 @@ export default function AddKeywordModal() {
         competitorRanks: rankingSignals.competitorRanks,
         rankingApps: rankingSignals.rankingApps,
         rankingResultCount: rankingSignals.rankingResultCount,
+        ...rankStatus,
         popularitySource: 'estimated',
         difficultySource: 'itunes-search',
         rankSource: 'itunes-search',
