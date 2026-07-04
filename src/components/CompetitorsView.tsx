@@ -15,8 +15,32 @@ import {
   hydrateKeywordRanking,
   slugifyKeyword,
 } from '@/lib/keywordHydration';
+import type { RankingSignals } from '@/lib/keywordHydration';
 
 const MAX_EXTRACTED_KEYWORDS = 18;
+const MAX_SCANNED_CANDIDATES = 60;
+
+interface ExtractOpportunity {
+  keyword: string;
+  yourRank: number | null;
+  competitorRank: number;
+  popularity: number;
+  difficultyScore: number;
+  opportunityScore: number;
+  added: boolean;
+}
+
+interface ExtractReport {
+  scanned: number;
+  matched: number;
+  added: number;
+  updated: number;
+  opportunities: ExtractOpportunity[];
+}
+
+interface ScoredOpportunity extends ExtractOpportunity {
+  signals: RankingSignals;
+}
 
 function uniqueTerms(values: string[]): string[] {
   const seen = new Set<string>();
@@ -45,6 +69,18 @@ function competitorSeedTerms(app: TrackedApp): string[] {
   ]).slice(0, 8);
 }
 
+function opportunityScore(
+  popularity: number,
+  difficultyScore: number,
+  yourRank: number | null,
+  competitorRank: number
+): number {
+  const competitorLead =
+    yourRank === null ? Math.max(0, 32 - competitorRank) : Math.max(0, yourRank - competitorRank);
+  const difficultyBonus = Math.max(0, 100 - difficultyScore);
+  return Math.round(popularity * 0.55 + competitorLead * 1.5 + difficultyBonus * 0.25);
+}
+
 export default function CompetitorsView() {
   const {
     apps,
@@ -61,6 +97,7 @@ export default function CompetitorsView() {
   } = useAppStore();
   const [extractingId, setExtractingId] = React.useState<string | null>(null);
   const [extractMessages, setExtractMessages] = React.useState<Record<string, string>>({});
+  const [extractReports, setExtractReports] = React.useState<Record<string, ExtractReport>>({});
 
   const competitors = apps.filter((a) => a.isCompetitor && a.region === selectedRegion);
   const primaryApp = apps.find((a) => a.id === selectedAppId);
@@ -264,21 +301,29 @@ export default function CompetitorsView() {
       const candidates = uniqueTerms([
         ...seeds,
         ...hinted.flat(),
+        primaryApp.name,
+        primaryApp.category,
+        `${primaryApp.category} apps`,
+        `best ${primaryApp.category} apps`,
+        `${primaryApp.name} alternative`,
         ...appKeywords.map((keyword) => keyword.keyword),
       ])
         .filter((keyword) => !existing.has(keyword))
-        .slice(0, 40);
+        .slice(0, MAX_SCANNED_CANDIDATES);
 
-      const extracted: TrackedKeyword[] = [];
       const hydratedExisting: TrackedKeyword[] = [];
+      const opportunities: ScoredOpportunity[] = [];
       for (const keyword of appKeywords) {
         hydratedExisting.push(
           await hydrateKeywordRanking(keyword, selectedAppId, selectedRegion, competitors)
         );
       }
 
-      for (const candidate of candidates) {
-        if (extracted.length >= MAX_EXTRACTED_KEYWORDS) break;
+      for (const [index, candidate] of candidates.entries()) {
+        setExtractMessages((current) => ({
+          ...current,
+          [competitor.id]: `Scanning ${index + 1} of ${candidates.length}: ${candidate}`,
+        }));
 
         const signals = await fetchRankingSignals(candidate, selectedAppId, selectedRegion, competitors, 100);
         const competitorRank = signals.competitorRanks[competitor.id] ?? null;
@@ -286,45 +331,81 @@ export default function CompetitorsView() {
 
         const popularity = calculatePopularity(candidate);
         const difficultyScore = calculateDifficultyScore(popularity, signals.topRatings);
+        const score = opportunityScore(popularity, difficultyScore, signals.currentRank, competitorRank);
 
-        const keywordSlug = slugifyKeyword(candidate);
-
-        extracted.push({
-          id: `kw-${selectedRegion}-${selectedAppId}-${competitor.id}-${keywordSlug}`,
+        opportunities.push({
           keyword: candidate,
+          yourRank: signals.currentRank,
+          competitorRank,
+          popularity,
+          difficultyScore,
+          opportunityScore: score,
+          added: false,
+          signals,
+        });
+      }
+
+      const sortedOpportunities = opportunities.sort((a, b) => b.opportunityScore - a.opportunityScore);
+      const selectedOpportunities = sortedOpportunities.slice(0, MAX_EXTRACTED_KEYWORDS);
+      const selectedKeywords = new Set(selectedOpportunities.map((opportunity) => opportunity.keyword));
+
+      const extracted: TrackedKeyword[] = selectedOpportunities.map((opportunity) => {
+        const keywordSlug = slugifyKeyword(opportunity.keyword);
+
+        return {
+          id: `kw-${selectedRegion}-${selectedAppId}-${competitor.id}-${keywordSlug}`,
+          keyword: opportunity.keyword,
           appId: selectedAppId,
           region: selectedRegion,
-          popularity,
+          popularity: opportunity.popularity,
           popularitySource: 'estimated',
-          difficulty: calculateDifficulty(popularity, signals.topRatings),
-          difficultyScore,
+          difficulty: calculateDifficulty(opportunity.popularity, opportunity.signals.topRatings),
+          difficultyScore: opportunity.difficultyScore,
           difficultySource: 'itunes-search',
-          currentRank: signals.currentRank,
+          currentRank: opportunity.signals.currentRank,
           previousRank: null,
           rankChange: null,
           rankSource: 'itunes-search',
-          competitorRanks: signals.competitorRanks,
-          rankingApps: signals.rankingApps,
+          competitorRanks: opportunity.signals.competitorRanks,
+          rankingApps: opportunity.signals.rankingApps,
           tags: competitorTag ? [competitorTag] : [],
           note: null,
           rankHistory: [
             {
               date: new Date().toISOString(),
-              rank: signals.currentRank,
+              rank: opportunity.signals.currentRank,
             },
           ],
           lastUpdated: new Date().toISOString(),
           addedAt: new Date().toISOString(),
-        });
-      }
+        };
+      });
 
       upsertKeywords(hydratedExisting);
       extracted.forEach(addKeyword);
+      setExtractReports((current) => ({
+        ...current,
+        [competitor.id]: {
+          scanned: candidates.length,
+          matched: opportunities.length,
+          added: extracted.length,
+          updated: hydratedExisting.length,
+          opportunities: sortedOpportunities.slice(0, 8).map((opportunity) => ({
+            keyword: opportunity.keyword,
+            yourRank: opportunity.yourRank,
+            competitorRank: opportunity.competitorRank,
+            popularity: opportunity.popularity,
+            difficultyScore: opportunity.difficultyScore,
+            opportunityScore: opportunity.opportunityScore,
+            added: selectedKeywords.has(opportunity.keyword),
+          })),
+        },
+      }));
       setExtractMessages((current) => ({
         ...current,
         [competitor.id]:
           extracted.length > 0 || hydratedExisting.length > 0
-            ? `Updated ${hydratedExisting.length} tracked keyword${hydratedExisting.length === 1 ? '' : 's'} and added ${extracted.length} observed opportunity keyword${extracted.length === 1 ? '' : 's'}.`
+            ? `Scanned ${candidates.length} public candidates, matched ${opportunities.length}, and added ${extracted.length} opportunity keyword${extracted.length === 1 ? '' : 's'}.`
             : 'No new observed ranking keywords found in public search results.',
       }));
     } catch {
@@ -429,6 +510,8 @@ export default function CompetitorsView() {
             setAddAppMode('competitor');
             setAddAppModalOpen(true);
           }}
+          disabled={!selectedAppId}
+          title={selectedAppId ? 'Add competitor' : 'Add your app first'}
         >
           <Plus size={14} />
           Add Competitor
@@ -441,10 +524,16 @@ export default function CompetitorsView() {
         <div className="empty-state" style={{ marginTop: '80px' }}>
           <Users size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
           <div className="empty-state-title">
-            {observedCompetitors.length > 0 ? 'No tracked competitors yet' : 'No competitors added'}
+            {!selectedAppId
+              ? 'Add your app first'
+              : observedCompetitors.length > 0
+                ? 'No tracked competitors yet'
+                : 'No competitors added'}
           </div>
           <div className="empty-state-text">
-            {observedCompetitors.length > 0
+            {!selectedAppId
+              ? 'Choose the app you want to benchmark before adding competitors.'
+              : observedCompetitors.length > 0
               ? 'Add an observed app above to turn ranking sightings into side-by-side comparison data.'
               : 'Add competitor apps to compare keyword rankings and discover new opportunities.'}
           </div>
@@ -455,6 +544,7 @@ export default function CompetitorsView() {
               setAddAppMode('competitor');
               setAddAppModalOpen(true);
             }}
+            disabled={!selectedAppId}
           >
             <Plus size={14} />
             Add your first competitor
@@ -585,6 +675,33 @@ export default function CompetitorsView() {
                   {extractMessages[comp.id] && (
                     <div className="credential-note">
                       {extractMessages[comp.id]}
+                    </div>
+                  )}
+                  {extractReports[comp.id] && (
+                    <div className="extract-report">
+                      <div className="extract-report-summary">
+                        <span>{extractReports[comp.id].scanned} scanned</span>
+                        <span>{extractReports[comp.id].matched} matched</span>
+                        <span>{extractReports[comp.id].added} added</span>
+                        <span>{extractReports[comp.id].updated} refreshed</span>
+                      </div>
+                      {extractReports[comp.id].opportunities.length > 0 && (
+                        <div className="extract-opportunities">
+                          {extractReports[comp.id].opportunities.map((opportunity) => (
+                            <div key={opportunity.keyword} className="extract-opportunity-row">
+                              <div>
+                                <div className="keyword-text">{opportunity.keyword}</div>
+                                <div className="extract-opportunity-meta">
+                                  You {opportunity.yourRank ? `#${opportunity.yourRank}` : '—'} · Competitor #{opportunity.competitorRank}
+                                </div>
+                              </div>
+                              <div className="extract-opportunity-score">
+                                {opportunity.added ? 'Added' : opportunity.opportunityScore}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

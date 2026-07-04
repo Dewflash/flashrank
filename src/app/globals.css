@@ -1588,6 +1588,67 @@ textarea {
   font-weight: 700;
 }
 
+.extract-report {
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.extract-report-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border-color);
+}
+
+.extract-report-summary span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.extract-opportunities {
+  display: flex;
+  flex-direction: column;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.extract-opportunity-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px;
+  gap: var(--space-sm);
+  align-items: center;
+  min-height: 54px;
+  padding: var(--space-sm);
+  border-top: 1px solid var(--border-color);
+}
+
+.extract-opportunity-meta {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.extract-opportunity-score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  min-height: 26px;
+  border-radius: var(--border-radius-sm);
+  background: var(--color-info-bg);
+  color: var(--color-info);
+  font-weight: 800;
+  font-size: 12px;
+}
+
 /* ========================================
    OVERVIEW CARDS
    ======================================== */
