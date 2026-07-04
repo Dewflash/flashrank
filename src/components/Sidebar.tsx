@@ -1,17 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   BarChart3,
   Search,
   Users,
-  Tag,
   Settings,
   ChevronLeft,
   ChevronRight,
-  RefreshCw,
   Plus,
   LayoutDashboard,
+  Star,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import TagManagerModal from '@/components/TagManagerModal';
@@ -23,6 +22,7 @@ export default function Sidebar() {
   const {
     apps,
     selectedAppId,
+    selectedRegion,
     setSelectedApp,
     viewMode,
     setViewMode,
@@ -38,8 +38,12 @@ export default function Sidebar() {
   } = useAppStore();
 
   const selectedApp = apps.find((a) => a.id === selectedAppId);
-  const keywordCount = keywords.filter((k) => k.appId === selectedAppId).length;
-  const competitorCount = apps.filter((a) => a.isCompetitor).length;
+  const keywordCount = keywords.filter(
+    (k) => k.appId === selectedAppId && k.region === selectedRegion
+  ).length;
+  const competitorCount = apps.filter(
+    (a) => a.isCompetitor && a.region === selectedRegion
+  ).length;
 
   const formatSyncTime = (time: string | null) => {
     if (!time) return 'Never';
@@ -54,14 +58,24 @@ export default function Sidebar() {
     return date.toLocaleDateString();
   };
 
+  useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      window.matchMedia('(max-width: 720px)').matches &&
+      !isSidebarCollapsed
+    ) {
+      toggleSidebar();
+    }
+  }, [isSidebarCollapsed, toggleSidebar]);
+
   return (
     <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
       {/* Header */}
       <div className="sidebar-header">
-        <div className="sidebar-logo">A</div>
+        <div className="sidebar-logo">F</div>
         <div>
-          <div className="sidebar-title">Astro</div>
-          <div className="sidebar-subtitle">ASO Tool</div>
+          <div className="sidebar-title">FlashRank</div>
+          <div className="sidebar-subtitle">ASO Studio</div>
         </div>
         <button
           className="btn btn-ghost btn-icon"
@@ -145,6 +159,13 @@ export default function Sidebar() {
             <span className="nav-label">Competitors</span>
             <span className="nav-badge">{competitorCount}</span>
           </button>
+          <button
+            className={`nav-item ${viewMode === 'ratings' ? 'active' : ''}`}
+            onClick={() => setViewMode('ratings')}
+          >
+            <Star size={18} className="nav-item-icon" />
+            <span className="nav-label">Ratings & Reviews</span>
+          </button>
         </div>
 
         <div className="nav-section">
@@ -201,7 +222,7 @@ export default function Sidebar() {
       <div className="sidebar-footer">
         <div className="sync-status">
           <span className={`sync-dot ${isRefreshing ? 'refreshing' : ''}`} />
-          <span className="sync-text">
+          <span className="sync-text" suppressHydrationWarning>
             {isRefreshing ? 'Syncing...' : `Synced ${formatSyncTime(lastSyncTime)}`}
           </span>
         </div>

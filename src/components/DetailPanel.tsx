@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect, react-hooks/static-components */
+
 import React, { useState, useEffect } from 'react';
 import { X, Star, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import {
@@ -36,7 +38,7 @@ export default function DetailPanel() {
       const fetchApps = async () => {
         setIsLoadingApps(true);
         try {
-          const results = await searchApps(keyword.keyword, keyword.region || 'us');
+          const results = await searchApps(keyword.keyword, keyword.region || 'us', 100);
           setTopApps(results.slice(0, 10));
         } catch (e) {
           console.error("Failed to fetch top apps", e);
@@ -130,6 +132,9 @@ export default function DetailPanel() {
             <div className="stat-value" style={{ color: 'var(--accent-primary-hover)' }}>
               {keyword.popularity}
             </div>
+            <div className="stat-change">
+              {keyword.popularitySource === 'apple-search-ads' ? 'Apple Search Ads' : 'Estimated'}
+            </div>
           </div>
           <div className="stat-card">
             <div className="stat-label">Difficulty</div>
@@ -150,6 +155,9 @@ export default function DetailPanel() {
               <span className={`difficulty-badge ${keyword.difficulty}`}>
                 {keyword.difficulty}
               </span>
+            </div>
+            <div className="stat-change">
+              Top 10 competition
             </div>
           </div>
           <div className="stat-card">

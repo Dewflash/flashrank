@@ -1,21 +1,170 @@
 'use client';
 
 import React from 'react';
-import { Users, Plus, Trash2, ArrowUp, ArrowDown, Minus } from 'lucide-react';
+import { Users, Plus, Trash2, ArrowUp, ArrowDown, Search, Loader2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import type { AppMetadata, TrackedApp, TrackedKeyword } from '@/types';
+import {
+  calculateDifficulty,
+  calculateDifficultyScore,
+  calculatePopularity,
+  getKeywordSuggestions,
+  searchApps,
+} from '@/lib/api';
+
+const MAX_EXTRACTED_KEYWORDS = 18;
+
+function uniqueTerms(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values
+    .map((value) => value.toLowerCase().replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim())
+    .filter((value) => {
+      if (value.length < 2 || seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    });
+}
+
+function competitorSeedTerms(app: TrackedApp): string[] {
+  const name = app.name.toLowerCase().replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const words = name.split(/\s+/).filter((word) => word.length > 2);
+  const category = app.category.toLowerCase();
+
+  return uniqueTerms([
+    name,
+    ...words,
+    `${name} app`,
+    `${name} game`,
+    `${name} alternative`,
+    `${category} apps`,
+    `best ${category} apps`,
+  ]).slice(0, 8);
+}
 
 export default function CompetitorsView() {
   const {
     apps,
     keywords,
     selectedAppId,
+    selectedRegion,
     removeApp,
     setAddAppModalOpen,
+    addKeyword,
+    tags,
   } = useAppStore();
+  const [extractingId, setExtractingId] = React.useState<string | null>(null);
+  const [extractMessages, setExtractMessages] = React.useState<Record<string, string>>({});
 
-  const competitors = apps.filter((a) => a.isCompetitor);
+  const competitors = apps.filter((a) => a.isCompetitor && a.region === selectedRegion);
   const primaryApp = apps.find((a) => a.id === selectedAppId);
-  const appKeywords = keywords.filter((k) => k.appId === selectedAppId);
+  const appKeywords = keywords.filter(
+    (k) => k.appId === selectedAppId && k.region === selectedRegion
+  );
+  const competitorTag = tags.find((tag) => tag.name.toLowerCase() === 'competitor');
+
+  const extractCompetitorKeywords = async (competitor: TrackedApp) => {
+    if (!selectedAppId || !primaryApp || extractingId) return;
+
+    setExtractingId(competitor.id);
+    setExtractMessages((current) => ({
+      ...current,
+      [competitor.id]: 'Scanning public App Store rankings...',
+    }));
+
+    const existing = new Set(
+      keywords
+        .filter((keyword) => keyword.appId === selectedAppId && keyword.region === selectedRegion)
+        .map((keyword) => keyword.keyword.toLowerCase())
+    );
+
+    try {
+      const seeds = competitorSeedTerms(competitor);
+      const hinted = await Promise.all(
+        seeds.map(async (seed) => {
+          try {
+            return await getKeywordSuggestions(seed);
+          } catch {
+            return [];
+          }
+        })
+      );
+
+      const candidates = uniqueTerms([
+        ...seeds,
+        ...hinted.flat(),
+        ...appKeywords.map((keyword) => keyword.keyword),
+      ])
+        .filter((keyword) => !existing.has(keyword))
+        .slice(0, 40);
+
+      const extracted: TrackedKeyword[] = [];
+      for (const candidate of candidates) {
+        if (extracted.length >= MAX_EXTRACTED_KEYWORDS) break;
+
+        let results: AppMetadata[] = [];
+        try {
+          results = await searchApps(candidate, selectedRegion, 30);
+        } catch {
+          results = [];
+        }
+
+        const competitorIndex = results.findIndex((app) => app.id === competitor.id);
+        if (competitorIndex === -1) continue;
+
+        const ownIndex = results.findIndex((app) => app.id === selectedAppId);
+        const topRatings = results.slice(0, 10).map((app) => app.ratingCount);
+        const popularity = calculatePopularity(candidate);
+        const difficultyScore = calculateDifficultyScore(popularity, topRatings);
+
+        const keywordSlug = candidate.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+        extracted.push({
+          id: `kw-${selectedRegion}-${selectedAppId}-${competitor.id}-${keywordSlug}`,
+          keyword: candidate,
+          appId: selectedAppId,
+          region: selectedRegion,
+          popularity,
+          popularitySource: 'estimated',
+          difficulty: calculateDifficulty(popularity, topRatings),
+          difficultyScore,
+          difficultySource: 'itunes-search',
+          currentRank: ownIndex === -1 ? null : ownIndex + 1,
+          previousRank: null,
+          rankChange: null,
+          rankSource: 'itunes-search',
+          competitorRanks: {
+            [competitor.id]: competitorIndex + 1,
+          },
+          tags: competitorTag ? [competitorTag] : [],
+          note: null,
+          rankHistory: [
+            {
+              date: new Date().toISOString(),
+              rank: ownIndex === -1 ? null : ownIndex + 1,
+            },
+          ],
+          lastUpdated: new Date().toISOString(),
+          addedAt: new Date().toISOString(),
+        });
+      }
+
+      extracted.forEach(addKeyword);
+      setExtractMessages((current) => ({
+        ...current,
+        [competitor.id]:
+          extracted.length > 0
+            ? `Added ${extracted.length} observed ranking keyword${extracted.length === 1 ? '' : 's'}.`
+            : 'No new observed ranking keywords found in public search results.',
+      }));
+    } catch {
+      setExtractMessages((current) => ({
+        ...current,
+        [competitor.id]: 'Extraction failed. Check the network and try again.',
+      }));
+    } finally {
+      setExtractingId(null);
+    }
+  };
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-lg)' }}>
@@ -152,6 +301,25 @@ export default function CompetitorsView() {
                     </div>
                   </div>
                 </div>
+                <div style={{ marginTop: 'var(--space-md)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => void extractCompetitorKeywords(comp)}
+                    disabled={extractingId !== null}
+                  >
+                    {extractingId === comp.id ? (
+                      <Loader2 size={14} className="spin" />
+                    ) : (
+                      <Search size={14} />
+                    )}
+                    Extract ranking keywords
+                  </button>
+                  {extractMessages[comp.id] && (
+                    <div className="credential-note">
+                      {extractMessages[comp.id]}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -211,20 +379,12 @@ export default function CompetitorsView() {
                         </div>
                       </td>
                       {competitors.map((comp) => {
-                        // Simulated competitor rank
-                        const simRank =
-                          kw.currentRank
-                            ? Math.max(
-                                1,
-                                kw.currentRank +
-                                  Math.floor(Math.random() * 20 - 10)
-                              )
-                            : null;
+                        const competitorRank = kw.competitorRanks?.[comp.id] ?? null;
                         return (
                           <td key={comp.id}>
-                            {simRank ? (
-                              <span className={`rank-value ${simRank <= 3 ? `rank-${simRank}` : ''}`}>
-                                #{simRank}
+                            {competitorRank ? (
+                              <span className={`rank-value ${competitorRank <= 3 ? `rank-${competitorRank}` : ''}`}>
+                                #{competitorRank}
                               </span>
                             ) : (
                               <span className="rank-value unranked">—</span>

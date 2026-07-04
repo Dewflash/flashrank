@@ -1,4 +1,4 @@
-// Zustand store — single source of truth for the Astro ASO Clone
+// Zustand store — single source of truth for FlashRank
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import {
@@ -10,12 +10,14 @@ import {
   SortDirection,
   ViewMode,
 } from '@/types';
+import { seedApps, seedKeywords, seedTags } from '@/data/seedData';
 
 // ─── Action types ───────────────────────────────────────────────────────────
 
 interface AppActions {
   // App management
   setSelectedApp: (appId: string) => void;
+  setSelectedRegion: (region: string) => void;
   addApp: (app: TrackedApp) => void;
   removeApp: (appId: string) => void;
 
@@ -40,6 +42,7 @@ interface AppActions {
   // UI state
   toggleSidebar: () => void;
   setAddKeywordModalOpen: (open: boolean) => void;
+  setKeywordResearchModalOpen: (open: boolean) => void;
   setAddAppModalOpen: (open: boolean) => void;
   setDetailPanelOpen: (open: boolean) => void;
   setRefreshing: (refreshing: boolean) => void;
@@ -57,15 +60,17 @@ export const useAppStore = create<AppState & AppActions>()(
     (set, get) => ({
       // ── Initial state ──────────────────────────────────────────
 
-      apps: [],
-      selectedAppId: null,
-      keywords: [],
+      apps: seedApps,
+      selectedAppId: '506627515',
+      selectedRegion: 'sg',
+      keywords: seedKeywords,
       selectedKeywordId: null,
       viewMode: 'keywords',
       sort: { field: 'popularity', direction: 'desc' },
       filter: { search: '', tags: [], difficulty: [], rankRange: [null, null] },
       isSidebarCollapsed: false,
       isAddKeywordModalOpen: false,
+      isKeywordResearchModalOpen: false,
       isAddAppModalOpen: false,
       isDetailPanelOpen: false,
       isRefreshing: false,
@@ -79,23 +84,54 @@ export const useAppStore = create<AppState & AppActions>()(
         asaKeyId: '',
         asaPrivateKey: '',
       },
-      tags: [
-        { id: 'tag-1', name: 'Brand', color: 'var(--tag-blue)' },
-        { id: 'tag-2', name: 'Generic', color: 'var(--tag-purple)' },
-        { id: 'tag-3', name: 'Competitor', color: 'var(--tag-red)' },
-        { id: 'tag-4', name: 'High Priority', color: 'var(--tag-yellow)' },
-      ],
+      tags: seedTags,
 
   // ── App management ─────────────────────────────────────────
 
   setSelectedApp: (appId) =>
-    set({
+    set((state) => ({
       selectedAppId: appId,
       selectedKeywordId: null, // reset keyword selection on app switch
-    }),
+      isDetailPanelOpen: false,
+      filter: {
+        ...state.filter,
+        search: '',
+        tags: [],
+        difficulty: [],
+        rankRange: [null, null],
+      },
+    })),
+
+  setSelectedRegion: (region) =>
+    set((state) => ({
+      selectedRegion: region,
+      selectedKeywordId: null,
+      isDetailPanelOpen: false,
+      filter: {
+        ...state.filter,
+        search: '',
+        tags: [],
+        difficulty: [],
+        rankRange: [null, null],
+      },
+    })),
 
   addApp: (app) =>
-    set((state) => ({ apps: [...state.apps, app] })),
+    set((state) => {
+      const existingIndex = state.apps.findIndex(
+        (existingApp) => existingApp.id === app.id && existingApp.region === app.region
+      );
+
+      if (existingIndex === -1) {
+        return { apps: [...state.apps, app] };
+      }
+
+      return {
+        apps: state.apps.map((existingApp, index) =>
+          index === existingIndex ? { ...existingApp, ...app } : existingApp
+        ),
+      };
+    }),
 
   removeApp: (appId) =>
     set((state) => ({
@@ -204,6 +240,8 @@ export const useAppStore = create<AppState & AppActions>()(
 
   setAddKeywordModalOpen: (open) => set({ isAddKeywordModalOpen: open }),
 
+  setKeywordResearchModalOpen: (open) => set({ isKeywordResearchModalOpen: open }),
+
   setAddAppModalOpen: (open) => set({ isAddAppModalOpen: open }),
 
   setDetailPanelOpen: (open) => set({ isDetailPanelOpen: open }),
@@ -227,6 +265,9 @@ export const useAppStore = create<AppState & AppActions>()(
     return keywords.filter((kw) => {
       // Must belong to the currently-selected app
       if (selectedAppId && kw.appId !== selectedAppId) return false;
+
+      // Search text (case-insensitive, matches keyword string)
+      if (kw.region !== get().selectedRegion) return false;
 
       // Search text (case-insensitive, matches keyword string)
       if (
@@ -299,7 +340,7 @@ export const useAppStore = create<AppState & AppActions>()(
   },
 }),
 {
-  name: 'astro-aso-storage', // key in localStorage
+  name: 'flashrank-storage', // key in localStorage
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         // What fields to persist
@@ -307,6 +348,7 @@ export const useAppStore = create<AppState & AppActions>()(
         keywords: state.keywords,
         tags: state.tags,
         selectedAppId: state.selectedAppId,
+        selectedRegion: state.selectedRegion,
         viewMode: state.viewMode,
         sort: state.sort,
         isSidebarCollapsed: state.isSidebarCollapsed,

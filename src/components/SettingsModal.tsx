@@ -1,8 +1,50 @@
 'use client';
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import React, { useState, useEffect } from 'react';
-import { X, Key, Shield, HelpCircle } from 'lucide-react';
+import { X, Key, Shield } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import { getCredentialStatuses, CredentialStatus } from '@/lib/credentials';
+
+type ServerCredentialStatus = {
+  appStoreConnect: {
+    state: CredentialStatus['state'];
+    hasIssuerId: boolean;
+    hasKeyId: boolean;
+    hasPrivateKey: boolean;
+  };
+  appleSearchAds: {
+    state: CredentialStatus['state'];
+    hasClientId: boolean;
+    hasTeamId: boolean;
+    hasKeyId: boolean;
+    hasPrivateKey: boolean;
+  };
+  deepl: {
+    state: CredentialStatus['state'];
+    hasAuthKey: boolean;
+  };
+};
+
+function StatusPill({ status }: { status: Pick<CredentialStatus, 'state'> }) {
+  const className =
+    status.state === 'ready'
+      ? 'status-pill ready'
+      : status.state === 'incomplete'
+        ? 'status-pill incomplete'
+        : 'status-pill missing';
+
+  return (
+    <span className={className}>
+      {status.state === 'ready'
+        ? 'Ready'
+        : status.state === 'incomplete'
+          ? 'Incomplete'
+          : 'Not set'}
+    </span>
+  );
+}
 
 export default function SettingsModal({
   isOpen,
@@ -14,11 +56,30 @@ export default function SettingsModal({
   const { apiKeys, setApiKeys } = useAppStore();
   
   const [localKeys, setLocalKeys] = useState(apiKeys);
-  const [activeTab, setActiveTab] = useState<'asc' | 'asa'>('asc');
+  const [activeTab, setActiveTab] = useState<'asc' | 'asa' | 'deepl'>('asc');
+  const [serverStatus, setServerStatus] = useState<ServerCredentialStatus | null>(null);
+  const statuses = getCredentialStatuses(localKeys);
+  const localAscStatus = statuses.find((status) => status.provider === 'appStoreConnect')!;
+  const localAsaStatus = statuses.find((status) => status.provider === 'appleSearchAds')!;
+  const ascStatus: CredentialStatus =
+    serverStatus?.appStoreConnect.state === 'ready'
+      ? { ...localAscStatus, state: 'ready', missingFields: [] }
+      : localAscStatus;
+  const asaStatus: CredentialStatus =
+    serverStatus?.appleSearchAds.state === 'ready'
+      ? { ...localAsaStatus, state: 'ready', missingFields: [] }
+      : localAsaStatus;
+  const deeplStatus = {
+    state: serverStatus?.deepl.state ?? 'missing',
+  } satisfies Pick<CredentialStatus, 'state'>;
 
   useEffect(() => {
     if (isOpen) {
       setLocalKeys(apiKeys);
+      fetch('/api/credentials/status')
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data: ServerCredentialStatus | null) => setServerStatus(data))
+        .catch(() => setServerStatus(null));
     }
   }, [isOpen, apiKeys]);
 
@@ -45,6 +106,8 @@ export default function SettingsModal({
           <button
             style={{
               padding: '12px 16px',
+              display: 'inline-flex',
+              alignItems: 'center',
               background: 'transparent',
               border: 'none',
               borderBottom: activeTab === 'asc' ? '2px solid var(--accent-primary)' : '2px solid transparent',
@@ -55,10 +118,13 @@ export default function SettingsModal({
             onClick={() => setActiveTab('asc')}
           >
             App Store Connect
+            <StatusPill status={ascStatus} />
           </button>
           <button
             style={{
               padding: '12px 16px',
+              display: 'inline-flex',
+              alignItems: 'center',
               background: 'transparent',
               border: 'none',
               borderBottom: activeTab === 'asa' ? '2px solid var(--accent-primary)' : '2px solid transparent',
@@ -69,6 +135,24 @@ export default function SettingsModal({
             onClick={() => setActiveTab('asa')}
           >
             Apple Search Ads
+            <StatusPill status={asaStatus} />
+          </button>
+          <button
+            style={{
+              padding: '12px 16px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'deepl' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+              color: activeTab === 'deepl' ? 'var(--text-primary)' : 'var(--text-tertiary)',
+              fontWeight: activeTab === 'deepl' ? 600 : 400,
+              cursor: 'pointer',
+            }}
+            onClick={() => setActiveTab('deepl')}
+          >
+            DeepL
+            <StatusPill status={deeplStatus} />
           </button>
         </div>
 
@@ -77,8 +161,18 @@ export default function SettingsModal({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ padding: '12px', background: 'var(--color-info-bg)', color: 'var(--color-info)', borderRadius: 'var(--border-radius-sm)', fontSize: '13px', display: 'flex', gap: '8px' }}>
                 <Shield size={16} style={{ flexShrink: 0 }} />
-                <span>Provides real app analytics (Impressions, Product Page Views, Downloads). Requires a Sales and Reports role key from App Store Connect.</span>
+                <span>Paste keys in <code>.env.local</code> for server-side use, or store them locally here for testing. Create an App Store Connect API key, then keep the Issuer ID, Key ID, and .p8 private key.</span>
               </div>
+              {serverStatus?.appStoreConnect.state === 'ready' && (
+                <div className="credential-note">
+                  Detected complete App Store Connect credentials in <code>.env.local</code>.
+                </div>
+              )}
+              {ascStatus.missingFields.length > 0 && (
+                <div className="credential-note">
+                  Missing: {ascStatus.missingFields.join(', ')}
+                </div>
+              )}
               
               <div className="form-group">
                 <label className="form-label">Issuer ID</label>
@@ -120,8 +214,18 @@ export default function SettingsModal({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ padding: '12px', background: 'var(--color-info-bg)', color: 'var(--color-info)', borderRadius: 'var(--border-radius-sm)', fontSize: '13px', display: 'flex', gap: '8px' }}>
                 <Shield size={16} style={{ flexShrink: 0 }} />
-                <span>Provides exact Apple Search Ads popularity scores (1-100). Requires an Apple Search Ads API Certificate.</span>
+                <span>Paste keys in <code>.env.local</code> for server-side use, or store them locally here for testing. Create Search Ads API credentials, then keep the client ID, team ID, key ID, and private key.</span>
               </div>
+              {serverStatus?.appleSearchAds.state === 'ready' && (
+                <div className="credential-note">
+                  Detected complete Apple Search Ads credentials in <code>.env.local</code>.
+                </div>
+              )}
+              {asaStatus.missingFields.length > 0 && (
+                <div className="credential-note">
+                  Missing: {asaStatus.missingFields.join(', ')}
+                </div>
+              )}
 
               <div className="form-group">
                 <label className="form-label">Client ID</label>
@@ -166,6 +270,27 @@ export default function SettingsModal({
                   onChange={(e) => setLocalKeys({ ...localKeys, asaPrivateKey: e.target.value })}
                   style={{ fontFamily: 'monospace', fontSize: '12px' }}
                 />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'deepl' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ padding: '12px', background: 'var(--color-info-bg)', color: 'var(--color-info)', borderRadius: 'var(--border-radius-sm)', fontSize: '13px', display: 'flex', gap: '8px' }}>
+                <Shield size={16} style={{ flexShrink: 0 }} />
+                <span>DeepL powers hover translation for foreign-language keywords. Add <code>DEEPL_AUTH_KEY</code> to <code>.env.local</code>; the key stays server-side.</span>
+              </div>
+              {serverStatus?.deepl.state === 'ready' ? (
+                <div className="credential-note">
+                  Detected DeepL credentials in <code>.env.local</code>.
+                </div>
+              ) : (
+                <div className="credential-note">
+                  Missing: DEEPL_AUTH_KEY
+                </div>
+              )}
+              <div className="credential-note">
+                DeepL API Free includes a limited monthly character allowance. Use an API Free key ending in <code>:fx</code> or a Pro key; the app picks the right endpoint automatically.
               </div>
             </div>
           )}

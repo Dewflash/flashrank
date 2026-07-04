@@ -7,8 +7,10 @@ import KeywordTable from '@/components/KeywordTable';
 import DetailPanel from '@/components/DetailPanel';
 import AddKeywordModal from '@/components/AddKeywordModal';
 import AddAppModal from '@/components/AddAppModal';
+import KeywordResearchModal from '@/components/KeywordResearchModal';
 import OverviewView from '@/components/OverviewView';
 import CompetitorsView from '@/components/CompetitorsView';
+import RatingsReviewsView from '@/components/RatingsReviewsView';
 import StatusBar from '@/components/StatusBar';
 import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import { useAppStore } from '@/store/useAppStore';
@@ -16,16 +18,11 @@ import { runBackgroundSync } from '@/lib/syncEngine';
 
 export default function Home() {
   const { viewMode } = useAppStore();
-  const [isMounted, setIsMounted] = React.useState(false);
 
   React.useEffect(() => {
-    setIsMounted(true);
     // Kick off background sync (will only run if > 24 hours since last sync)
     runBackgroundSync();
   }, []);
-
-  if (!isMounted) return null;
-
 
   const renderMainContent = () => {
     switch (viewMode) {
@@ -33,6 +30,8 @@ export default function Home() {
         return <OverviewView />;
       case 'competitors':
         return <CompetitorsView />;
+      case 'ratings':
+        return <RatingsReviewsView />;
       case 'keywords':
       default:
         return (
@@ -50,7 +49,7 @@ export default function Home() {
       <Sidebar />
       <div className="main-content">
         <HeaderBar />
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div className="workspace-area">
           {renderMainContent()}
         </div>
         <StatusBar />
@@ -58,6 +57,7 @@ export default function Home() {
 
       {/* Modals */}
       <AddKeywordModal />
+      <KeywordResearchModal />
       <AddAppModal />
     </div>
   );

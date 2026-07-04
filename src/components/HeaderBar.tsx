@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Plus, Download, RefreshCw } from 'lucide-react';
+import { Search, Plus, Download, RefreshCw, Lightbulb } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import RegionSelector from '@/components/RegionSelector';
+import { runBackgroundSync } from '@/lib/syncEngine';
 
 export default function HeaderBar() {
   const {
@@ -12,13 +13,17 @@ export default function HeaderBar() {
     setSearchFilter,
     keywords,
     selectedAppId,
+    selectedRegion,
+    setSelectedRegion,
     setAddKeywordModalOpen,
+    setKeywordResearchModalOpen,
     isRefreshing,
-    setRefreshing,
   } = useAppStore();
 
-  const [region, setRegion] = useState('us');
-  const keywordCount = keywords.filter((k) => k.appId === selectedAppId).length;
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const keywordCount = keywords.filter(
+    (k) => k.appId === selectedAppId && k.region === selectedRegion
+  ).length;
 
   const handleExport = () => {
     const appKeywords = keywords.filter((k) => k.appId === selectedAppId);
@@ -39,16 +44,25 @@ export default function HeaderBar() {
     URL.revokeObjectURL(url);
   };
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    // Simulate refresh
-    setTimeout(() => setRefreshing(false), 2000);
+  const handleRefresh = async () => {
+    setRefreshError(null);
+    try {
+      await runBackgroundSync({
+        force: true,
+        appId: selectedAppId,
+        region: selectedRegion,
+      });
+    } catch {
+      setRefreshError('Refresh failed');
+      window.setTimeout(() => setRefreshError(null), 3000);
+    }
   };
 
   const titleMap = {
     keywords: 'Keywords',
     competitors: 'Competitors',
     overview: 'Overview',
+    ratings: 'Ratings & Reviews',
   };
 
   return (
@@ -74,11 +88,11 @@ export default function HeaderBar() {
                 onChange={(e) => setSearchFilter(e.target.value)}
               />
             </div>
-            <RegionSelector value={region} onChange={setRegion} />
+            <RegionSelector value={selectedRegion} onChange={setSelectedRegion} />
             <button
               className="btn btn-secondary btn-icon tooltip"
               onClick={handleRefresh}
-              data-tooltip="Refresh data"
+              data-tooltip={refreshError || 'Refresh rankings'}
               disabled={isRefreshing}
             >
               <RefreshCw
@@ -97,11 +111,18 @@ export default function HeaderBar() {
               <Download size={16} />
             </button>
             <button
+              className="btn btn-warning"
+              onClick={() => setKeywordResearchModalOpen(true)}
+            >
+              <Lightbulb size={16} />
+              Find Suggestions
+            </button>
+            <button
               className="btn btn-primary"
               onClick={() => setAddKeywordModalOpen(true)}
             >
               <Plus size={16} />
-              Add Keyword
+              Add Keywords
             </button>
           </>
         )}
@@ -109,4 +130,3 @@ export default function HeaderBar() {
     </div>
   );
 }
-

@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server';
+import { getAppleSearchAdsEnv, hasPrivateKey } from '@/lib/serverCredentials';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { clientId, teamId, keyId, privateKey, keyword } = body;
+    const envKeys = getAppleSearchAdsEnv();
+    const {
+      keyword,
+    } = body;
+    const clientId = body.clientId?.trim() || envKeys.clientId;
+    const teamId = body.teamId?.trim() || envKeys.teamId;
+    const keyId = body.keyId?.trim() || envKeys.keyId;
+    const privateKey = body.privateKey?.trim() || envKeys.privateKey;
 
     // In a true production environment, we would use the Search Ads API
     // https://api.searchads.apple.com/api/v4/keywords/targeting/search
@@ -16,7 +24,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!privateKey.includes('BEGIN PRIVATE KEY')) {
+    if (!hasPrivateKey(privateKey)) {
       return NextResponse.json(
         { error: 'Invalid private key format.' },
         { status: 400 }
@@ -39,9 +47,14 @@ export async function POST(request: Request) {
       data: {
         keyword,
         popularity: Math.max(5, score), // ASA scores are typically 5-100
+        source: 'estimated',
+        connector: 'apple-search-ads',
+        credentialsSource: envKeys.privateKey ? 'env' : 'request',
+        readyForRealCredentials: Boolean(clientId && teamId && keyId && privateKey),
+        warning: 'Apple Search Ads request signing is not wired yet; this score is deterministic fallback data.',
       }
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'Failed to fetch Search Ads data' },
       { status: 500 }

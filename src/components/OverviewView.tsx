@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect, react-hooks/static-components */
+
 import React from 'react';
 import {
   TrendingUp,
@@ -22,16 +24,20 @@ import {
   Cell,
 } from 'recharts';
 import { useAppStore } from '@/store/useAppStore';
+import { isProviderReady } from '@/lib/credentials';
 
 export default function OverviewView() {
-  const { keywords, selectedAppId, apps, apiKeys } = useAppStore();
-  const appKeywords = keywords.filter((k) => k.appId === selectedAppId);
+  const { keywords, selectedAppId, selectedRegion, apps, apiKeys } = useAppStore();
+  const appKeywords = keywords.filter(
+    (k) => k.appId === selectedAppId && k.region === selectedRegion
+  );
 
   const [metrics, setMetrics] = React.useState({ impressions: 0, productPageViews: 0, downloads: 0 });
+  const [metricsSource, setMetricsSource] = React.useState<'missing' | 'estimated' | 'app-store-connect'>('missing');
   const [isLoadingMetrics, setIsLoadingMetrics] = React.useState(false);
 
   React.useEffect(() => {
-    if (selectedAppId && apiKeys.ascIssuerId && apiKeys.ascKeyId && apiKeys.ascPrivateKey) {
+    if (selectedAppId && isProviderReady(apiKeys, 'appStoreConnect')) {
       setIsLoadingMetrics(true);
       fetch('/api/appStoreConnect', {
         method: 'POST',
@@ -47,10 +53,14 @@ export default function OverviewView() {
       .then(data => {
         if (data.data?.metrics) {
           setMetrics(data.data.metrics);
+          setMetricsSource(data.data.source ?? 'estimated');
         }
       })
       .catch(err => console.error("Failed to load ASC metrics", err))
       .finally(() => setIsLoadingMetrics(false));
+    } else {
+      setMetrics({ impressions: 0, productPageViews: 0, downloads: 0 });
+      setMetricsSource('missing');
     }
   }, [selectedAppId, apiKeys]);
 
@@ -91,6 +101,12 @@ export default function OverviewView() {
   ];
 
   const selectedApp = apps.find((a) => a.id === selectedAppId);
+  const privateMetricLabel =
+    metricsSource === 'missing'
+      ? 'Owner-only: App Store Connect required'
+      : metricsSource === 'estimated'
+        ? 'Estimated placeholder'
+        : 'App Store Connect';
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -183,7 +199,9 @@ export default function OverviewView() {
           <div className="stat-card-value">
             {isLoadingMetrics ? '...' : (metrics.impressions > 0 ? metrics.impressions.toLocaleString() : 'N/A')}
           </div>
-          <div className="stat-card-trend neutral">App Store Connect</div>
+          <div className="stat-card-trend neutral">
+            {privateMetricLabel}
+          </div>
         </div>
 
         <div className="stat-card">
@@ -194,7 +212,9 @@ export default function OverviewView() {
           <div className="stat-card-value">
             {isLoadingMetrics ? '...' : (metrics.downloads > 0 ? metrics.downloads.toLocaleString() : 'N/A')}
           </div>
-          <div className="stat-card-trend neutral">App Store Connect</div>
+          <div className="stat-card-trend neutral">
+            {privateMetricLabel}
+          </div>
         </div>
 
         <div className="overview-card">
@@ -236,7 +256,7 @@ export default function OverviewView() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
           gap: 'var(--space-md)',
           marginTop: 'var(--space-lg)',
         }}

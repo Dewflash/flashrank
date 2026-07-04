@@ -1,6 +1,10 @@
 import { useAppStore } from '@/store/useAppStore';
-import { searchApps } from '@/lib/api';
-import { TrackedKeyword } from '@/types';
+import {
+  calculateDifficulty,
+  calculateDifficultyScore,
+  searchApps,
+} from '@/lib/api';
+import { isProviderReady } from '@/lib/credentials';
 
 /**
  * Checks if 24 hours have passed since the last sync.
@@ -17,15 +21,29 @@ function shouldSync(lastSyncTime: string | null): boolean {
  * Iterates through all tracked keywords, fetches their current iTunes rank,
  * and updates the keyword's rank history.
  */
-export async function runBackgroundSync() {
-  const store = useAppStore.getState();
-  const { keywords, lastSyncTime, setRefreshing, apiKeys } = store;
+interface SyncOptions {
+  force?: boolean;
+  appId?: string | null;
+  region?: string;
+}
 
-  if (!shouldSync(lastSyncTime)) {
+export async function runBackgroundSync(options: SyncOptions = {}) {
+  const store = useAppStore.getState();
+  const { apps, keywords, lastSyncTime, setRefreshing, apiKeys } = store;
+
+  if (!options.force && !shouldSync(lastSyncTime)) {
     return;
   }
 
-  if (keywords.length === 0) {
+  const syncIndexes = keywords
+    .map((keyword, index) => ({ keyword, index }))
+    .filter(({ keyword }) => {
+      if (options.appId && keyword.appId !== options.appId) return false;
+      if (options.region && keyword.region !== options.region) return false;
+      return true;
+    });
+
+  if (syncIndexes.length === 0) {
     setRefreshing(true);
     // Just update the timestamp if there's nothing to sync
     useAppStore.setState({ lastSyncTime: new Date().toISOString() });
@@ -37,12 +55,17 @@ export async function runBackgroundSync() {
 
   try {
     const updatedKeywords = [...keywords];
+    const competitors = apps.filter((app) => {
+      if (!app.isCompetitor) return false;
+      if (options.region && app.region !== options.region) return false;
+      return true;
+    });
+    const hasSearchAdsCredentials = isProviderReady(apiKeys, 'appleSearchAds');
 
-    for (let i = 0; i < updatedKeywords.length; i++) {
-      const kw = updatedKeywords[i];
+    for (const { keyword: kw, index } of syncIndexes) {
       try {
-        // Fetch top 50 apps for this keyword in its region
-        const results = await searchApps(kw.keyword, kw.region || 'us');
+        // Fetch deeper results so ranks beyond page one are not mislabeled.
+        const results = await searchApps(kw.keyword, kw.region || 'us', 100);
         
         // Find our tracked app in the results
         const appIndex = results.findIndex((app) => app.id === kw.appId);
@@ -56,7 +79,8 @@ export async function runBackgroundSync() {
 
         // Fetch true popularity if Search Ads keys are available
         let truePopularity = kw.popularity;
-        if (apiKeys.asaClientId && apiKeys.asaTeamId && apiKeys.asaKeyId && apiKeys.asaPrivateKey) {
+        let popularitySource = kw.popularitySource ?? 'estimated';
+        if (hasSearchAdsCredentials) {
           try {
             const asaRes = await fetch('/api/searchAds', {
               method: 'POST',
@@ -72,11 +96,24 @@ export async function runBackgroundSync() {
             if (asaRes.ok) {
               const asaData = await asaRes.json();
               truePopularity = asaData.data.popularity;
+              popularitySource = asaData.data.source ?? 'apple-search-ads';
             }
           } catch (e) {
             console.error('Failed to fetch ASA popularity', e);
           }
         }
+
+        const topAppsRatings = results.slice(0, 10).map((app) => app.ratingCount);
+        const difficultyScore = calculateDifficultyScore(truePopularity, topAppsRatings);
+        const difficulty = calculateDifficulty(truePopularity, topAppsRatings);
+        const competitorRanks = competitors.reduce<Record<string, number | null>>(
+          (acc, competitor) => {
+            const competitorIndex = results.findIndex((app) => app.id === competitor.id);
+            acc[competitor.id] = competitorIndex === -1 ? null : competitorIndex + 1;
+            return acc;
+          },
+          {}
+        );
 
         // Add to history
         const newHistoryEntry = {
@@ -91,13 +128,19 @@ export async function runBackgroundSync() {
           newHistory.shift();
         }
 
-        updatedKeywords[i] = {
+        updatedKeywords[index] = {
           ...kw,
           popularity: truePopularity,
+          popularitySource,
+          difficulty,
+          difficultyScore,
+          difficultySource: 'itunes-search',
           currentRank,
           previousRank,
           rankChange,
           rankHistory: newHistory,
+          competitorRanks,
+          rankSource: 'itunes-search',
           lastUpdated: new Date().toISOString(),
         };
 

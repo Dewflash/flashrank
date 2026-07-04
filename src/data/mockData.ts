@@ -1,4 +1,4 @@
-// Mock data for Astro ASO Clone — realistic App Store Optimization dataset
+// Mock data for FlashRank — realistic App Store Optimization dataset
 import {
   TrackedApp,
   TrackedKeyword,

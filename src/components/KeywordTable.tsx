@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+/* eslint-disable react-hooks/static-components, react-hooks/set-state-in-effect */
+
+import React, { useEffect, useState } from 'react';
 import {
   ArrowUp,
   ArrowDown,
@@ -8,18 +10,90 @@ import {
   StickyNote,
   ChevronUp,
   ChevronDown,
+  Lightbulb,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { TrackedKeyword, SortField } from '@/types';
 import ContextMenu from '@/components/ContextMenu';
 
+type TranslationState =
+  | { status: 'idle'; text: null }
+  | { status: 'loading'; text: null }
+  | { status: 'ready'; text: string }
+  | { status: 'error'; text: string };
+
+function shouldTranslateKeyword(keyword: string): boolean {
+  return /[^\u0000-\u007f]/.test(keyword);
+}
+
+function TranslatableKeyword({ keyword }: { keyword: string }) {
+  const [translation, setTranslation] = useState<TranslationState>({
+    status: 'idle',
+    text: null,
+  });
+  const [isHovering, setIsHovering] = useState(false);
+  const canTranslate = shouldTranslateKeyword(keyword);
+
+  const loadTranslation = async () => {
+    if (!canTranslate || translation.status !== 'idle') return;
+
+    setTranslation({ status: 'loading', text: null });
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: keyword }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setTranslation({
+          status: 'error',
+          text: data.requiresKey ? 'DeepL key required' : data.error ?? 'Translation unavailable',
+        });
+        return;
+      }
+
+      setTranslation({
+        status: 'ready',
+        text: data.translation || 'No translation returned',
+      });
+    } catch {
+      setTranslation({ status: 'error', text: 'Translation unavailable' });
+    }
+  };
+
+  return (
+    <span
+      className={`keyword-text translatable-keyword ${canTranslate ? 'can-translate' : ''}`}
+      onMouseEnter={() => {
+        setIsHovering(true);
+        void loadTranslation();
+      }}
+      onMouseLeave={() => setIsHovering(false)}
+    >
+      {keyword}
+      {canTranslate && isHovering && (
+        <span className="translation-tooltip">
+          {translation.status === 'loading'
+            ? 'Translating...'
+            : translation.text ?? 'Translate with DeepL'}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function KeywordTable() {
   const {
     keywords,
     selectedAppId,
+    selectedRegion,
+    apps,
     selectedKeywordId,
     setSelectedKeyword,
     setDetailPanelOpen,
+    setKeywordResearchModalOpen,
     sort,
     setSort,
     filter,
@@ -30,6 +104,13 @@ export default function KeywordTable() {
     y: number;
     keywordId: string;
   } | null>(null);
+  const [now, setNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    setNow(Date.now());
+    const interval = window.setInterval(() => setNow(Date.now()), 60000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const handleContextMenu = (e: React.MouseEvent, keywordId: string) => {
     e.preventDefault();
@@ -39,6 +120,7 @@ export default function KeywordTable() {
   // Filter keywords
   const filtered = keywords.filter((k) => {
     if (k.appId !== selectedAppId) return false;
+    if (k.region !== selectedRegion) return false;
     if (filter.search) {
       const searchLower = filter.search.toLowerCase();
       if (!k.keyword.toLowerCase().includes(searchLower)) return false;
@@ -97,6 +179,47 @@ export default function KeywordTable() {
     return 'var(--text-tertiary)';
   };
 
+  const formatSource = (source: TrackedKeyword['popularitySource']) => {
+    switch (source) {
+      case 'apple-search-ads':
+        return 'ASA';
+      case 'itunes-search':
+        return 'iTunes';
+      case 'app-store-connect':
+        return 'ASC';
+      case 'estimated':
+      default:
+        return 'Est.';
+    }
+  };
+
+  const formatLastUpdate = (date: string) => {
+    const diff = (now ?? new Date(date).getTime()) - new Date(date).getTime();
+    const minutes = Math.max(0, Math.floor(diff / 60000));
+    if (minutes < 1) return 'now';
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    return new Date(date).toLocaleDateString();
+  };
+
+  const rankedAppsForKeyword = (kw: TrackedKeyword) => {
+    const rankMap: Array<{ appId: string; rank: number | null }> = [
+      { appId: kw.appId, rank: kw.currentRank },
+      ...Object.entries(kw.competitorRanks ?? {}).map(([appId, rank]) => ({
+        appId,
+        rank,
+      })),
+    ];
+
+    return rankMap
+      .filter((entry) => entry.rank !== null)
+      .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+      .map((entry) => apps.find((app) => app.id === entry.appId))
+      .filter(Boolean)
+      .slice(0, 8);
+  };
+
   const SortIndicator = ({ field }: { field: SortField }) => {
     if (sort.field !== field) return null;
     return sort.direction === 'asc' ? (
@@ -126,8 +249,18 @@ export default function KeywordTable() {
         <div className="empty-state-text">
           {filter.search
             ? 'Try adjusting your search filter'
-            : 'Click "Add Keyword" to start tracking keywords'}
+            : 'Find suggestions or add keywords manually to start tracking.'}
         </div>
+        {!filter.search && (
+          <button
+            className="btn btn-warning"
+            style={{ marginTop: 16 }}
+            onClick={() => setKeywordResearchModalOpen(true)}
+          >
+            <Lightbulb size={16} />
+            Find Suggestions
+          </button>
+        )}
       </div>
     );
   }
@@ -145,6 +278,16 @@ export default function KeywordTable() {
               <div className="th-content">
                 Keyword
                 <SortIndicator field="keyword" />
+              </div>
+            </th>
+            <th style={{ width: '70px' }}>
+              <div className="th-content">
+                Notes
+              </div>
+            </th>
+            <th style={{ minWidth: '130px' }}>
+              <div className="th-content">
+                Last update
               </div>
             </th>
             <th
@@ -173,7 +316,7 @@ export default function KeywordTable() {
               style={{ minWidth: '100px' }}
             >
               <div className="th-content">
-                Rank
+                Position
                 <SortIndicator field="rank" />
               </div>
             </th>
@@ -187,20 +330,23 @@ export default function KeywordTable() {
                 <SortIndicator field="change" />
               </div>
             </th>
-            <th style={{ width: '40px' }}>Note</th>
+            <th style={{ minWidth: '170px' }}>Apps in Ranking</th>
           </tr>
         </thead>
         <tbody>
-          {sorted.map((kw) => (
-            <tr
-              key={kw.id}
-              className={selectedKeywordId === kw.id ? 'selected' : ''}
-              onClick={() => handleRowClick(kw)}
-              onContextMenu={(e) => handleContextMenu(e, kw.id)}
-            >
+          {sorted.map((kw) => {
+            const rankedApps = rankedAppsForKeyword(kw);
+
+            return (
+              <tr
+                key={kw.id}
+                className={selectedKeywordId === kw.id ? 'selected' : ''}
+                onClick={() => handleRowClick(kw)}
+                onContextMenu={(e) => handleContextMenu(e, kw.id)}
+              >
               <td>
                 <div className="keyword-cell">
-                  <span className="keyword-text">{kw.keyword}</span>
+                  <TranslatableKeyword keyword={kw.keyword} />
                   {kw.tags.length > 0 && (
                     <div className="keyword-tags">
                       {kw.tags.map((tag) => (
@@ -220,6 +366,15 @@ export default function KeywordTable() {
                 </div>
               </td>
               <td>
+                <StickyNote
+                  size={14}
+                  className={`note-indicator ${kw.note ? 'has-note' : ''}`}
+                />
+              </td>
+              <td>
+                <span className="last-update-value">{formatLastUpdate(kw.lastUpdated)}</span>
+              </td>
+              <td>
                 <div className="popularity-cell">
                   <div className="popularity-bar-container">
                     <div
@@ -231,6 +386,16 @@ export default function KeywordTable() {
                     />
                   </div>
                   <span className="popularity-value">{kw.popularity}</span>
+                  <span
+                    className={`source-pill ${kw.popularitySource === 'apple-search-ads' ? 'verified' : ''}`}
+                    title={
+                      kw.popularitySource === 'apple-search-ads'
+                        ? 'Apple Search Ads'
+                        : 'Estimated until Apple Search Ads is wired'
+                    }
+                  >
+                    {formatSource(kw.popularitySource)}
+                  </span>
                 </div>
               </td>
               <td>
@@ -268,13 +433,30 @@ export default function KeywordTable() {
                 )}
               </td>
               <td>
-                <StickyNote
-                  size={14}
-                  className={`note-indicator ${kw.note ? 'has-note' : ''}`}
-                />
+                <div className="ranking-apps">
+                  {rankedApps.length > 0 ? (
+                    rankedApps.map((app) =>
+                      app?.icon ? (
+                        <img
+                          key={app.id}
+                          src={app.icon}
+                          alt={app.name}
+                          className="ranking-app-icon"
+                        />
+                      ) : (
+                        <span key={app?.id} className="ranking-app-icon placeholder">
+                          {app?.name.charAt(0) ?? '?'}
+                        </span>
+                      )
+                    )
+                  ) : (
+                    <span className="rank-value unranked">—</span>
+                  )}
+                </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
       {contextMenu && (

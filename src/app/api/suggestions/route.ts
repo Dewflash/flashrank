@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     }
 
     const text = await response.text();
-    const suggestions = parseHintsResponse(text);
+    const suggestions = cleanSuggestions(parseHintsResponse(text), term);
 
     return NextResponse.json(
       { suggestions },
@@ -108,6 +108,30 @@ function parseHintsResponse(text: string): string[] {
   }
 
   return [...new Set(suggestions)]; // Deduplicate
+}
+
+function cleanSuggestions(values: string[], term: string): string[] {
+  const blocked = new Set([
+    'suggestions',
+    'software',
+    'itunes',
+    'app store',
+    'search',
+  ]);
+  const normalizedTerm = term.trim().toLowerCase();
+  const seen = new Set<string>();
+
+  return values
+    .map((value) => value.replace(/\s+/g, ' ').trim())
+    .filter((value) => {
+      const normalized = value.toLowerCase();
+      if (normalized.length < 2 || normalized.length > 80) return false;
+      if (blocked.has(normalized)) return false;
+      if (!normalized.includes(normalizedTerm.split(/\s+/)[0])) return false;
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
 }
 
 /**

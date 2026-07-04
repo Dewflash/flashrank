@@ -53,6 +53,11 @@ function mapToAppMetadata(item: ITunesSearchResult): AppMetadata {
 // Public API functions
 // ---------------------------------------------------------------------------
 
+export function extractAppStoreId(input: string): string | null {
+  const match = input.match(/\/id(\d{6,})|[?&]id=(\d{6,})|^(\d{6,})$/i);
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
+}
+
 /**
  * Search for apps on the App Store via the local proxy API.
  *
@@ -62,9 +67,20 @@ function mapToAppMetadata(item: ITunesSearchResult): AppMetadata {
  */
 export async function searchApps(
   term: string,
-  country: string = 'us'
+  country: string = 'us',
+  limit: number = 25
 ): Promise<AppMetadata[]> {
-  const params = new URLSearchParams({ term, country });
+  const appId = extractAppStoreId(term.trim());
+  if (appId) {
+    const app = await lookupApp(appId, country);
+    return app ? [app] : [];
+  }
+
+  const params = new URLSearchParams({
+    term,
+    country,
+    limit: String(Math.min(Math.max(limit, 1), 200)),
+  });
   const response = await fetch(`/api/search?${params.toString()}`);
 
   if (!response.ok) {
@@ -216,6 +232,17 @@ export function calculateDifficulty(
   popularity: number,
   topAppsRatings: number[]
 ): KeywordSuggestion['difficulty'] {
+  const score = calculateDifficultyScore(popularity, topAppsRatings);
+
+  if (score >= 55) return 'high';
+  if (score >= 30) return 'medium';
+  return 'low';
+}
+
+export function calculateDifficultyScore(
+  popularity: number,
+  topAppsRatings: number[]
+): number {
   // Average rating count of the top apps (default to 0 if no data)
   const avgRatings =
     topAppsRatings.length > 0
@@ -226,7 +253,5 @@ export function calculateDifficulty(
   const competitionScore = Math.min(100, (avgRatings / 10_000) * 100);
   const composite = popularity * 0.4 + competitionScore * 0.6;
 
-  if (composite >= 55) return 'high';
-  if (composite >= 30) return 'medium';
-  return 'low';
+  return Math.round(Math.max(1, Math.min(100, composite)));
 }

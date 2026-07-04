@@ -1,69 +1,104 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { X, Search } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import { TrackedApp } from '@/types';
+import type { AppMetadata, TrackedApp } from '@/types';
 import { searchApps } from '@/lib/api';
+import { buildStarterKeywordsForApp } from '@/lib/keywordHydration';
 
 export default function AddAppModal() {
-  const { isAddAppModalOpen, setAddAppModalOpen, addApp, setSelectedApp } =
+  const {
+    isAddAppModalOpen,
+    setAddAppModalOpen,
+    addApp,
+    setSelectedApp,
+    setViewMode,
+    setKeywordResearchModalOpen,
+    selectedRegion,
+    keywords,
+    tags,
+    apps,
+    addKeyword,
+  } =
     useAppStore();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [results, setResults] = useState<any[]>([]);
+  const [submittedTerm, setSubmittedTerm] = useState('');
+  const [results, setResults] = useState<AppMetadata[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
   const [addAsCompetitor, setAddAsCompetitor] = useState(false);
+  const latestSearchId = useRef(0);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchTerm.trim()) return;
 
+    const query = searchTerm.trim();
+    const searchId = latestSearchId.current + 1;
+    latestSearchId.current = searchId;
+    setSubmittedTerm(query);
+    setResults([]);
     setIsLoading(true);
     try {
-      const apps = await searchApps(searchTerm);
-      setResults(apps);
+      const appResults = await searchApps(query, selectedRegion);
+      if (latestSearchId.current === searchId) {
+        setResults(appResults);
+      }
     } catch {
-      setResults([]);
+      if (latestSearchId.current === searchId) {
+        setResults([]);
+      }
     } finally {
-      setIsLoading(false);
+      if (latestSearchId.current === searchId) {
+        setIsLoading(false);
+      }
     }
   };
 
-  const handleSelectApp = (app: any) => {
+  const handleSelectApp = async (app: AppMetadata) => {
     const trackedApp: TrackedApp = {
-      id: String(app.id || app.trackId || Date.now()),
-      name: app.name || app.trackName || 'Unknown App',
-      developer: app.developer || app.artistName || 'Unknown Developer',
-      icon:
-        app.icon ||
-        app.artworkUrl100 ||
-        app.artworkUrl60 ||
-        '',
-      price: app.price || app.formattedPrice || 'Free',
-      rating: app.rating || app.averageUserRating || 0,
-      ratingCount: app.ratingCount || app.userRatingCount || 0,
-      category: app.category || app.primaryGenreName || 'Utilities',
-      platform: 'ios',
-      bundleId: app.bundleId || '',
-      url: app.url || app.trackViewUrl || '',
+      ...app,
       isCompetitor: addAsCompetitor,
       addedAt: new Date().toISOString(),
-      region: 'us',
+      region: selectedRegion,
     };
 
+    setIsAdding(true);
     addApp(trackedApp);
     if (!addAsCompetitor) {
       setSelectedApp(trackedApp.id);
+      setViewMode('keywords');
+      const competitors = apps.filter(
+        (existingApp) => existingApp.isCompetitor && existingApp.region === selectedRegion
+      );
+      try {
+        const starterKeywords = await buildStarterKeywordsForApp({
+          app: trackedApp,
+          region: selectedRegion,
+          existingKeywords: keywords,
+          tags,
+          competitors,
+          limit: 10,
+        });
+        starterKeywords.forEach(addKeyword);
+      } catch {
+        // The suggestions modal still opens so the user can retry manually.
+      }
+      window.setTimeout(() => setKeywordResearchModalOpen(true), 120);
     }
+    setIsAdding(false);
     handleClose();
   };
 
   const handleClose = () => {
     setAddAppModalOpen(false);
     setSearchTerm('');
+    setSubmittedTerm('');
     setResults([]);
     setAddAsCompetitor(false);
+    setIsAdding(false);
   };
 
   if (!isAddAppModalOpen) return null;
@@ -118,11 +153,15 @@ export default function AddAppModal() {
                   className="form-input"
                   placeholder="Enter app name or bundle ID..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setResults([]);
+                    setSubmittedTerm('');
+                  }}
                   autoFocus
                   style={{ flex: 1 }}
                 />
-                <button className="btn btn-primary" type="submit" disabled={isLoading}>
+                <button className="btn btn-primary" type="submit" disabled={isLoading || isAdding}>
                   <Search size={14} />
                   {isLoading ? 'Searching...' : 'Search'}
                 </button>
@@ -132,16 +171,30 @@ export default function AddAppModal() {
 
           {/* Results */}
           <div className="search-results">
-            {results.map((app: any) => (
+            {isAdding && (
+              <div className="credential-note" style={{ marginBottom: 12 }}>
+                Adding app and preparing starter keywords...
+              </div>
+            )}
+            {isLoading && results.length === 0 && (
+              <div className="empty-state" style={{ padding: '24px 0' }}>
+                <div className="empty-state-text">
+                  Searching {selectedRegion.toUpperCase()} App Store...
+                </div>
+              </div>
+            )}
+            {results.map((app) => (
               <div
-                key={app.id || app.trackId}
+                key={app.id}
                 className="search-result-item"
-                onClick={() => handleSelectApp(app)}
+                onClick={() => {
+                  if (!isAdding) void handleSelectApp(app);
+                }}
               >
-                {(app.icon || app.artworkUrl100) ? (
+                {app.icon ? (
                   <img
-                    src={app.icon || app.artworkUrl100}
-                    alt={app.name || app.trackName}
+                    src={app.icon}
+                    alt={app.name}
                     className="search-result-icon"
                   />
                 ) : (
@@ -157,20 +210,20 @@ export default function AddAppModal() {
                       fontWeight: 600,
                     }}
                   >
-                    {(app.name || app.trackName || 'A').charAt(0)}
+                    {app.name.charAt(0)}
                   </div>
                 )}
                 <div className="search-result-info">
                   <div className="search-result-name">
-                    {app.name || app.trackName}
+                    {app.name}
                   </div>
                   <div className="search-result-developer">
-                    {app.developer || app.artistName}
+                    {app.developer}
                   </div>
                 </div>
               </div>
             ))}
-            {results.length === 0 && searchTerm && !isLoading && (
+            {results.length === 0 && submittedTerm && !isLoading && !isAdding && (
               <div
                 className="empty-state"
                 style={{ padding: '24px 0' }}

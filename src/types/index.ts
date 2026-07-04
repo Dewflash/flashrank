@@ -1,4 +1,4 @@
-// Core TypeScript types for Astro ASO Clone
+// Core TypeScript types for FlashRank
 
 export interface AppMetadata {
   id: string;
@@ -38,6 +38,12 @@ export interface RankHistoryEntry {
   rank: number | null;
 }
 
+export type ASODataSource =
+  | 'estimated'
+  | 'itunes-search'
+  | 'apple-search-ads'
+  | 'app-store-connect';
+
 export interface TrackedKeyword {
   id: string;
   keyword: string;
@@ -52,6 +58,10 @@ export interface TrackedKeyword {
   tags: KeywordTag[];
   note: KeywordNote | null;
   rankHistory: RankHistoryEntry[];
+  competitorRanks?: Record<string, number | null>;
+  popularitySource?: ASODataSource;
+  difficultySource?: ASODataSource;
+  rankSource?: ASODataSource;
   lastUpdated: string;
   addedAt: string;
 }
@@ -98,12 +108,13 @@ export interface FilterState {
   rankRange: [number | null, number | null];
 }
 
-export type ViewMode = 'keywords' | 'competitors' | 'overview';
+export type ViewMode = 'keywords' | 'competitors' | 'overview' | 'ratings';
 
 export interface AppState {
   // Apps
   apps: TrackedApp[];
   selectedAppId: string | null;
+  selectedRegion: string;
   
   // Keywords
   keywords: TrackedKeyword[];
@@ -117,6 +128,7 @@ export interface AppState {
   // UI state
   isSidebarCollapsed: boolean;
   isAddKeywordModalOpen: boolean;
+  isKeywordResearchModalOpen: boolean;
   isAddAppModalOpen: boolean;
   isDetailPanelOpen: boolean;
   isRefreshing: boolean;

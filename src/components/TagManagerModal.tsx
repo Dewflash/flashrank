@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable react-hooks/purity */
+
 import React, { useState } from 'react';
 import { X, Plus, Edit2, Trash2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';

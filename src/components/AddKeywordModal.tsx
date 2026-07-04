@@ -4,7 +4,12 @@ import React, { useState, useCallback } from 'react';
 import { X, Plus, Sparkles } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { TrackedKeyword } from '@/types';
-import { getKeywordSuggestions, calculatePopularity, calculateDifficulty } from '@/lib/api';
+import {
+  getKeywordSuggestions,
+  calculatePopularity,
+  calculateDifficulty,
+  calculateDifficultyScore,
+} from '@/lib/api';
 
 export default function AddKeywordModal() {
   const {
@@ -12,6 +17,7 @@ export default function AddKeywordModal() {
     setAddKeywordModalOpen,
     addKeyword,
     selectedAppId,
+    selectedRegion,
     tags,
   } = useAppStore();
 
@@ -46,34 +52,36 @@ export default function AddKeywordModal() {
     []
   );
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setKeywordInput(value);
-    // Debounced fetch
-    const timer = setTimeout(() => fetchSuggestions(value), 300);
-    return () => clearTimeout(timer);
-  };
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => fetchSuggestions(keywordInput), 300);
+    return () => window.clearTimeout(timer);
+  }, [fetchSuggestions, keywordInput]);
 
   const handleAddKeyword = (keyword: string) => {
     if (!selectedAppId || !keyword.trim()) return;
 
     const popularity = calculatePopularity(keyword);
     const difficulty = calculateDifficulty(popularity, []);
+    const difficultyScore = calculateDifficultyScore(popularity, []);
 
     const newKeyword: TrackedKeyword = {
       id: `kw-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       keyword: keyword.trim().toLowerCase(),
       appId: selectedAppId,
-      region: 'us',
+      region: selectedRegion,
       popularity,
       difficulty,
-      difficultyScore: difficulty === 'low' ? 25 : difficulty === 'medium' ? 55 : 80,
+      difficultyScore,
       currentRank: null,
       previousRank: null,
       rankChange: null,
       tags: tags.filter((t) => selectedTags.includes(t.id)),
       note: null,
       rankHistory: [],
+      competitorRanks: {},
+      popularitySource: 'estimated',
+      difficultySource: 'estimated',
+      rankSource: 'itunes-search',
       lastUpdated: new Date().toISOString(),
       addedAt: new Date().toISOString(),
     };
@@ -116,7 +124,7 @@ export default function AddKeywordModal() {
                 className="form-input"
                 placeholder="Enter a keyword to track..."
                 value={keywordInput}
-                onChange={handleInputChange}
+                onChange={(e) => setKeywordInput(e.target.value)}
                 autoFocus
               />
             </div>

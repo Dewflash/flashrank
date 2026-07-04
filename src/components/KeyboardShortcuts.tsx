@@ -4,7 +4,7 @@ import React, { useEffect, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 
 /**
- * Global keyboard shortcut handler — mimics Astro's native macOS shortcuts.
+ * Global keyboard shortcut handler for FlashRank's macOS-style shortcuts.
  */
 export default function KeyboardShortcuts() {
   const {

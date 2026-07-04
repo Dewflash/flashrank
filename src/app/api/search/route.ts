@@ -15,6 +15,10 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const term = searchParams.get('term');
   const country = searchParams.get('country') || 'us';
+  const requestedLimit = Number(searchParams.get('limit') || '25');
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(Math.floor(requestedLimit), 1), 200)
+    : 25;
 
   if (!term) {
     return NextResponse.json(
@@ -24,7 +28,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const url = `${ITUNES_SEARCH_URL}?term=${encodeURIComponent(term)}&country=${encodeURIComponent(country)}&entity=software&limit=25`;
+    const url = `${ITUNES_SEARCH_URL}?term=${encodeURIComponent(term)}&country=${encodeURIComponent(country)}&entity=software&limit=${limit}`;
     const response = await fetch(url, { next: { revalidate: 60 } });
 
     if (!response.ok) {
