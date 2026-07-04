@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { X, Search } from 'lucide-react';
+import { X, Search, Trash2 } from 'lucide-react';
 import { appScopeKey, useAppStore } from '@/store/useAppStore';
 import type { AppMetadata, TrackedApp } from '@/types';
 import { searchApps } from '@/lib/api';
@@ -21,6 +21,7 @@ export default function AddAppModal() {
     setSelectedApp,
     setViewMode,
     setKeywordResearchModalOpen,
+    removeApp,
     selectedRegion,
     selectedAppId,
     keywords,
@@ -38,6 +39,7 @@ export default function AddAppModal() {
   const [isAdding, setIsAdding] = useState(false);
   const latestSearchId = useRef(0);
   const addAsCompetitor = addAppMode === 'competitor';
+  const selectedApp = apps.find((app) => app.id === selectedAppId);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,6 +161,16 @@ export default function AddAppModal() {
     setIsAdding(false);
   };
 
+  const handleRemoveSelectedApp = () => {
+    if (!selectedApp) return;
+    const confirmed = window.confirm(
+      `Remove ${selectedApp.name}? This will delete its tracked keywords, but keyword-only research will stay.`
+    );
+    if (!confirmed) return;
+    removeApp(selectedApp.id);
+    setViewMode('keywords');
+  };
+
   if (!isAddAppModalOpen) return null;
 
   return (
@@ -201,6 +213,37 @@ export default function AddAppModal() {
               Competitor
             </button>
           </div>
+
+          {!addAsCompetitor && selectedApp && (
+            <div className="current-app-row">
+              {selectedApp.icon ? (
+                <div
+                  role="img"
+                  aria-label={selectedApp.name}
+                  className="current-app-icon"
+                  style={{ backgroundImage: `url(${selectedApp.icon})` }}
+                />
+              ) : (
+                <div className="current-app-icon placeholder">
+                  {selectedApp.name.charAt(0)}
+                </div>
+              )}
+              <div className="current-app-info">
+                <div className="current-app-label">Current app</div>
+                <div className="current-app-name">{selectedApp.name}</div>
+                <div className="current-app-developer">{selectedApp.developer}</div>
+              </div>
+              <button
+                className="btn btn-ghost btn-icon tooltip current-app-remove"
+                onClick={handleRemoveSelectedApp}
+                data-tooltip="Remove current app"
+                aria-label={`Remove ${selectedApp.name}`}
+                disabled={isAdding}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          )}
 
           <form onSubmit={handleSearch}>
             <div className="form-group">

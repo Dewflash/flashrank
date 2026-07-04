@@ -11,7 +11,6 @@ import {
   Plus,
   LayoutDashboard,
   Star,
-  Trash2,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import TagManagerModal from '@/components/TagManagerModal';
@@ -33,7 +32,6 @@ export default function Sidebar() {
     toggleSidebar,
     setAddAppModalOpen,
     setAddAppMode,
-    removeApp,
     isRefreshing,
     lastSyncTime,
     filter,
@@ -48,18 +46,6 @@ export default function Sidebar() {
   const competitorCount = apps.filter(
     (a) => a.isCompetitor && a.region === selectedRegion
   ).length;
-
-  const handleRemoveSelectedApp = (event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (!selectedApp) return;
-
-    const confirmed = window.confirm(
-      `Remove ${selectedApp.name}? This will delete its tracked keywords, but keyword-only research will stay.`
-    );
-    if (!confirmed) return;
-    removeApp(selectedApp.id);
-    setViewMode('keywords');
-  };
 
   const formatSyncTime = (time: string | null) => {
     if (!time) return 'Never';
@@ -109,59 +95,47 @@ export default function Sidebar() {
 
       {/* App Selector */}
       <div className="app-selector">
-        <div className="app-selector-row">
-          <button
-            className="app-selector-btn"
-            onClick={() => {
-              setAddAppMode('mine');
-              setAddAppModalOpen(true);
-            }}
-          >
-            {selectedApp ? (
-              <>
-                {selectedApp.icon ? (
-                  <img
-                    src={selectedApp.icon}
-                    alt={selectedApp.name}
-                    className="app-selector-icon"
-                  />
-                ) : (
-                  <div className="app-selector-icon-placeholder">
-                    <BarChart3 size={18} color="white" />
-                  </div>
-                )}
-                <div className="app-selector-info">
-                  <div className="app-selector-name">{selectedApp.name}</div>
-                  <div className="app-selector-developer">
-                    {selectedApp.developer}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
+        <button
+          className="app-selector-btn"
+          onClick={() => {
+            setAddAppMode('mine');
+            setAddAppModalOpen(true);
+          }}
+        >
+          {selectedApp ? (
+            <>
+              {selectedApp.icon ? (
+                <img
+                  src={selectedApp.icon}
+                  alt={selectedApp.name}
+                  className="app-selector-icon"
+                />
+              ) : (
                 <div className="app-selector-icon-placeholder">
-                  <Plus size={18} color="white" />
+                  <BarChart3 size={18} color="white" />
                 </div>
-                <div className="app-selector-info">
-                  <div className="app-selector-name">Add an App</div>
-                  <div className="app-selector-developer">
-                    Search the App Store
-                  </div>
+              )}
+              <div className="app-selector-info">
+                <div className="app-selector-name">{selectedApp.name}</div>
+                <div className="app-selector-developer">
+                  {selectedApp.developer}
                 </div>
-              </>
-            )}
-          </button>
-          {selectedApp && (
-            <button
-              className="app-selector-remove btn btn-ghost btn-icon tooltip"
-              onClick={handleRemoveSelectedApp}
-              data-tooltip="Remove selected app"
-              aria-label={`Remove ${selectedApp.name}`}
-            >
-              <Trash2 size={14} />
-            </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="app-selector-icon-placeholder">
+                <Plus size={18} color="white" />
+              </div>
+              <div className="app-selector-info">
+                <div className="app-selector-name">Add an App</div>
+                <div className="app-selector-developer">
+                  Search the App Store
+                </div>
+              </div>
+            </>
           )}
-        </div>
+        </button>
       </div>
 
       {/* Navigation */}

@@ -227,15 +227,8 @@ textarea {
   border-bottom: 1px solid var(--border-color);
 }
 
-.app-selector-row {
-  display: flex;
-  align-items: stretch;
-  gap: var(--space-xs);
-}
-
 .app-selector-btn {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -251,27 +244,6 @@ textarea {
 .app-selector-btn:hover {
   background: var(--bg-surface-hover);
   border-color: var(--border-color-hover);
-}
-
-.app-selector-remove {
-  width: 36px;
-  height: auto;
-  flex: 0 0 36px;
-  color: var(--text-tertiary);
-}
-
-.app-selector-remove:hover {
-  color: var(--color-danger);
-  border-color: var(--color-danger);
-  background: var(--color-danger-bg);
-}
-
-.sidebar.collapsed .app-selector-remove {
-  display: none;
-}
-
-.sidebar.collapsed.mobile-open .app-selector-remove {
-  display: inline-flex;
 }
 
 .app-selector-icon {
@@ -1443,6 +1415,77 @@ textarea.form-input {
 /* Search results in modal */
 .search-results {
   margin-top: var(--space-sm);
+}
+
+.current-app-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  margin-bottom: var(--space-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  background: var(--bg-surface);
+}
+
+.current-app-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--border-radius-sm);
+  background-position: center;
+  background-size: cover;
+  object-fit: cover;
+  flex: 0 0 40px;
+}
+
+.current-app-icon.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-gradient);
+  color: white;
+  font-weight: 700;
+}
+
+.current-app-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.current-app-label {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.current-app-name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.current-app-developer {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.current-app-remove {
+  flex: 0 0 34px;
+  color: var(--text-tertiary);
+}
+
+.current-app-remove:hover {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
 }
 
 .search-result-item {
